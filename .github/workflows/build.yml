@@ -22,10 +22,10 @@ jobs:
         run: |
           cat <(echo -e "${{ secrets.OSSRH_GPG_SECRET_KEY }}") | gpg --batch --import
           gpg --list-secret-keys --keyid-format LONG
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check Maven Cache
         id: maven-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -33,29 +33,29 @@ jobs:
             ${{ runner.os }}-maven-
       - name: Check Local Maven Cache
         id: maven-it-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: maven/target/local-repo
           key: mvn-it-repo
       - name: Check ODC Data Cache
         id: odc-data-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: core/target/data
           key: odc-data
-      - uses: actions/setup-dotnet@v3.0.3
+      - uses: actions/setup-dotnet@v4.2.0
         with:
-          dotnet-version: '6.0.x'
-      - name: Set up JDK 1.8
-        id: jdk-8
-        uses: actions/setup-java@v3
+          dotnet-version: '8.0.x'
+      - name: Set up JDK 11
+        id: jdk-11
+        uses: actions/setup-java@v4
         with:
-          java-version: 8
+          java-version: 11
           distribution: 'zulu'
           server-id: ossrh
           server-username: ${{ secrets.OSSRH_USERNAME }}
           server-password: ${{ secrets.OSSRH_TOKEN }}
-      - uses: pnpm/action-setup@v2.2.4
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
         with:
           version: 6.0.2
       - name: Build Snapshot with Maven
@@ -63,7 +63,8 @@ jobs:
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
-        run: mvn -s settings.xml -Prelease clean package verify source:jar javadoc:jar gpg:sign deploy -DreleaseTesting --no-transfer-progress --batch-mode -Dgpg.passphrase=${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: mvn -V -s settings.xml -Prelease clean package verify source:jar javadoc:jar gpg:sign deploy -DreleaseTesting --no-transfer-progress --batch-mode -Dgpg.passphrase=${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}
       - name: SARIF Multitool
         uses: microsoft/sarif-actions@v0.1
         with:
@@ -72,14 +73,14 @@ jobs:
       - name: Archive IT test logs
         id: archive-logs
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: it-test-logs
           retention-days: 7
           path: maven/target/it/**/build.log
       - name: Archive code coverage results
         id: archive-coverage
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: code-coverage-report
           retention-days: 7
@@ -88,7 +89,7 @@ jobs:
             **/target/jacoco-results/**/*.html
       - name: Archive Snapshot
         id: archive-snapshot
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: archive-snapshot
           retention-days: 7
@@ -105,7 +106,7 @@ jobs:
     needs: build
     steps:
       - name: Download coverage reports
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: code-coverage-report
       - name: Run codacy-coverage-reporter
@@ -126,22 +127,22 @@ jobs:
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Check Maven Cache
         id: maven-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
       - name: Download release build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: archive-snapshot
       - name: Build Docker Image
         run: ./build-docker.sh
       - name: build scan target
-        run: mvn -s settings.xml package -DskipTests=true --no-transfer-progress --batch-mode
+        run: mvn -V -s settings.xml package -DskipTests=true --no-transfer-progress --batch-mode
       - name: Test Docker Image
         run: ./test-docker.sh

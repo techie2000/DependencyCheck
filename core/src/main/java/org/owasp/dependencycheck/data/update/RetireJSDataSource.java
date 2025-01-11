@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
  * @author Jeremy Long
  */
 @ThreadSafe
-public class RetireJSDataSource implements CachedWebDataSource {
+public class RetireJSDataSource extends LocalDataSource {
 
     /**
      * Static logger.
@@ -87,6 +87,7 @@ public class RetireJSDataSource implements CachedWebDataSource {
             if (proceed) {
                 LOGGER.debug("Begin RetireJS Update");
                 initializeRetireJsRepo(settings, url, repoFile);
+                saveLastUpdated(repoFile, System.currentTimeMillis() / 1000);
             }
         } catch (MalformedURLException ex) {
             throw new UpdateException(String.format("Invalid URL for RetireJS repository (%s)", configuredUrl), ex);
@@ -109,7 +110,7 @@ public class RetireJSDataSource implements CachedWebDataSource {
         boolean proceed = true;
         if (repo != null && repo.isFile()) {
             final int validForHours = settings.getInt(Settings.KEYS.ANALYZER_RETIREJS_REPO_VALID_FOR_HOURS, 0);
-            final long lastUpdatedOn = repo.lastModified();
+            final long lastUpdatedOn = getLastUpdated(repo);
             final long now = System.currentTimeMillis();
             LOGGER.debug("Last updated: {}", lastUpdatedOn);
             LOGGER.debug("Now: {}", now);
@@ -121,6 +122,7 @@ public class RetireJSDataSource implements CachedWebDataSource {
         }
         return proceed;
     }
+
 
     /**
      * Initializes the local RetireJS repository
@@ -135,8 +137,7 @@ public class RetireJSDataSource implements CachedWebDataSource {
     private void initializeRetireJsRepo(Settings settings, URL repoUrl, File repoFile) throws UpdateException {
         try (WriteLock lock = new WriteLock(settings, true, repoFile.getName() + ".lock")) {
             LOGGER.debug("RetireJS Repo URL: {}", repoUrl.toExternalForm());
-            final Downloader downloader = new Downloader(settings);
-            downloader.fetchFile(repoUrl, repoFile, Settings.KEYS.ANALYZER_RETIREJS_REPO_JS_USER, Settings.KEYS.ANALYZER_RETIREJS_REPO_JS_PASSWORD);
+            Downloader.getInstance().fetchFile(repoUrl, repoFile);
         } catch (IOException | TooManyRequestsException | ResourceNotFoundException | WriteLockException ex) {
             throw new UpdateException("Failed to initialize the RetireJS repo", ex);
         }

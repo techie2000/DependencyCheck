@@ -17,15 +17,17 @@
  */
 package org.owasp.dependencycheck.data.nodeaudit;
 
+import io.github.jeremylong.openvulnerability.client.nvd.CvssV3;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.owasp.dependencycheck.dependency.CvssV3;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import org.json.JSONException;
+import org.owasp.dependencycheck.utils.CvssUtil;
 
 /**
  * Parser for NPM Audit API response. This parser is derived from:
@@ -118,7 +120,7 @@ public class NpmAuditParser {
         }
         final JSONObject jsonCvss = object.optJSONObject("cvss");
         if (jsonCvss != null) {
-            float baseScore = -1.0f;
+            double baseScore = -1.0;
             final String score = jsonCvss.optString("score");
             if (score != null) {
                 try {
@@ -130,13 +132,13 @@ public class NpmAuditParser {
             }
             if (baseScore >= 0.0) {
                 final String vector = jsonCvss.optString("vectorString");
-                if (vector != null) {
+                if (vector != null && !"null".equals(vector)) {
                     if (vector.startsWith("CVSS:3") && baseScore >= 0.0) {
                         try {
-                            final CvssV3 cvss = new CvssV3(vector, baseScore);
+                            final CvssV3 cvss = CvssUtil.vectorToCvssV3(vector, baseScore);
                             advisory.setCvssV3(cvss);
                         } catch (IllegalArgumentException iae) {
-                            LOGGER.warn("Invalid CVSS vector format encountered in NPM Audit results '{}' ", vector, iae);
+                            LOGGER.warn("Invalid CVSS vector format encountered in NPM Audit results '{}': {} ", vector, iae.getMessage());
                         }
                     } else {
                         LOGGER.warn("Unsupported CVSS vector format in NPM Audit results, please file a feature "

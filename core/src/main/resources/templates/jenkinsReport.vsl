@@ -575,10 +575,12 @@ Getting Help: <a href="https://github.com/jeremylong/DependencyCheck/issues" tar
                             #set($severestVuln=$dependency.getVulnerabilities(true).iterator().next())
                             ## yes - we are mixing v2 and v3...  no consistency in data so doing the best we can
                             ## with a set sorted approximately on descending severity
-                            #if ($severestVuln.cvssV3)
-                                #set($cveImpact=$severestVuln.cvssV3.baseScore)
+                            #if ($severestVuln.cvssV4)
+                                #set($cveImpact=$severestVuln.cvssV4.cvssData.baseScore)
+                            #elseif ($severestVuln.cvssV3)
+                                #set($cveImpact=$severestVuln.cvssV3.cvssData.baseScore)
                             #elseif ($severestVuln.cvssV2)
-                                #set($cveImpact=$severestVuln.cvssV2.score)
+                                #set($cveImpact=$severestVuln.cvssV2.cvssData.baseScore)
                             #end
                             #set($cveSeverity=$enc.html($severestVuln.highestSeverityText))
                         #end
@@ -728,13 +730,18 @@ Getting Help: <a href="https://github.com/jeremylong/DependencyCheck/issues" tar
                             #end
                             #if($vuln.getCvssV2())
                             CVSSv2:
-                            <ul><li>Base Score: $enc.html($vuln.getCvssV2().getSeverity()) ($vuln.getCvssV2().getScore())</li>
-                            <li>Vector: $enc.html($vuln.getCvssV2().toString())</li></ul>
+                            <ul><li>Base Score: $enc.html($vuln.getCvssV2().getCvssData().getBaseSeverity()) ($vuln.getCvssV2().getCvssData().getBaseScore())</li>
+                                <li>Vector: $enc.html($vuln.getCvssV2().toString())</li></ul>
                             #end
                             #if($vuln.getCvssV3())
                             CVSSv3:
-                            <ul><li>Base Score: $enc.html($vuln.getCvssV3().getBaseSeverity()) ($vuln.getCvssV3().getBaseScore())</li>
-                            <li>Vector: $enc.html($vuln.getCvssV3().toString())</li></ul>
+                            <ul><li>Base Score: $enc.html($vuln.getCvssV3().getCvssData().getBaseSeverity()) ($vuln.getCvssV3().getCvssData().getBaseScore())</li>
+                                <li>Vector: $enc.html($vuln.getCvssV3().toString())</li></ul>
+                            #end
+                            #if($vuln.getCvssV4())
+                                CVSSv4:
+                                <ul><li>Base Score: $enc.html($vuln.getCvssV4().getCvssData().getBaseSeverity()) ($vuln.getCvssV4().getCvssData().getBaseScore())</li>
+                                    <li>Vector: $enc.html($vuln.getCvssV4().toString())</li></ul>
                             #end
                             #if ($vuln.unscoredSeverity)
                             Unscored:
@@ -743,9 +750,11 @@ Getting Help: <a href="https://github.com/jeremylong/DependencyCheck/issues" tar
                             #if ($vuln.getReferences().size()>0)
                                 <br/>References:<ul>
                                 #foreach($ref in $vuln.getReferences(true))
-                                    #if ($ref.url)
+                                    #if ($ref.url && $ref.name)
                                     <li>$enc.html($ref.source) - <a target="_blank" href="$enc.html($ref.url)">$enc.html($ref.name)</a></li>
-                                    #else
+                                    #elseif ($ref.uri)
+                                    <li>$enc.html($ref.source) - <a target="_blank" href="$enc.html($ref.url)">$enc.html($ref.url)</a></li>
+                                    #elseif ($ref.name)
                                     <li>$enc.html($ref.source) - $enc.html($ref.name)</li>
                                     #end
                                 #end
