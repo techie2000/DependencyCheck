@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Remove Labels
         if: contains(github.event.issue.labels.*.name, 'pending more information')
-        uses: actions/github-script@v6.4.0
+        uses: actions/github-script@v7.0.1
         with:
           script: |
               github.rest.issues.removeLabel({
@@ -32,7 +32,7 @@ jobs:
                 repo: context.repo.repo
               })
               )
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           path: odc
       - name: Parse False Positive Issue
@@ -41,7 +41,7 @@ jobs:
         with:
           issue-body: ${{ github.event.issue.body }}
           template-path: odc/.github/ISSUE_TEMPLATE/false-positive-report.yml
-      - uses: actions/setup-node@v3.6.0
+      - uses: actions/setup-node@v4.1.0
         with:
           node-version: 14
       - name: Initialize npm
@@ -50,7 +50,7 @@ jobs:
           npm install packageurl-js
       - name: Parse Package URL
         id: purl-parser
-        uses: actions/github-script@v6.4.0
+        uses: actions/github-script@v7.0.1
         env:
           PURL: ${{ fromJSON(steps.issue-parser.outputs.jsonString).purl }}
         with:
@@ -111,9 +111,9 @@ jobs:
           cd ..
       - name: Setup dotnet
         if: ${{ fromJSON(steps.purl-parser.outputs.result).type == 'nuget' }}
-        uses: actions/setup-dotnet@v3.0.3
+        uses: actions/setup-dotnet@v4.2.0
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: '8.0.x'
       - name: Setup dotnet fp-project
         if: ${{ fromJSON(steps.purl-parser.outputs.result).type == 'nuget' }}
         env:
@@ -126,7 +126,7 @@ jobs:
           dotnet publish
           cd ..
       - name: "Check for setup complete"
-        uses: andstor/file-existence-action@v2
+        uses: andstor/file-existence-action@v3
         id: check_files
         with:
           files: "./fp-project"
@@ -142,13 +142,13 @@ jobs:
             --enableExperimental
       - name: Upload FP Report
         if: steps.check_files.outputs.files_exists == 'true'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
            name: FP Report
            path: ${{github.workspace}}/reports
       - name: Comment on maven issue
         if: ${{ fromJSON(steps.purl-parser.outputs.result).type == 'maven' }}
-        uses: actions/github-script@v6.4.0
+        uses: actions/github-script@v7.0.1
         env:
           GROUPID: ${{ fromJSON(steps.purl-parser.outputs.result).namespace }}
           ARTIFACTID: ${{ fromJSON(steps.purl-parser.outputs.result).name }}
@@ -199,7 +199,7 @@ jobs:
             })
       - name: Comment on npm issue
         if: ${{ fromJSON(steps.purl-parser.outputs.result).type == 'npm' }}
-        uses: actions/github-script@v6.4.0
+        uses: actions/github-script@v7.0.1
         env:
           NAME: ${{ fromJSON(steps.purl-parser.outputs.result).name }}
           VERSION: ${{ fromJSON(steps.purl-parser.outputs.result).version }}
@@ -246,7 +246,7 @@ jobs:
             })
       - name: Comment on dotnet issue
         if: ${{ fromJSON(steps.purl-parser.outputs.result).type == 'nuget' }}
-        uses: actions/github-script@v6.4.0
+        uses: actions/github-script@v7.0.1
         env:
           NAME: ${{ fromJSON(steps.purl-parser.outputs.result).name }}
           VERSION: ${{ fromJSON(steps.purl-parser.outputs.result).version }}
@@ -293,7 +293,7 @@ jobs:
             
       - name: Message failure
         if: ${{ failure() }}
-        uses: actions/github-script@v6.4.0
+        uses: actions/github-script@v7.0.1
         with:
           script: |
             github.rest.issues.createComment({

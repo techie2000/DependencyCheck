@@ -150,7 +150,7 @@ public class MSBuildProjectAnalyzer extends AbstractFileTypeAnalyzer {
             final List<NugetPackageReference> packages;
 
             try (FileInputStream fis = new FileInputStream(dependency.getActualFilePath());
-                    BOMInputStream bis = new BOMInputStream(fis)) {
+                    BOMInputStream bis = BOMInputStream.builder().setInputStream(fis).get()) {
                 //skip BOM if it exists
                 bis.getBOM();
                 packages = parser.parse(bis, props, centrallyManaged);
@@ -185,6 +185,7 @@ public class MSBuildProjectAnalyzer extends AbstractFileTypeAnalyzer {
                 child.setMd5sum(Checksum.getMD5Checksum(String.format("%s:%s", id, version)));
 
                 child.addEvidence(EvidenceType.PRODUCT, "msbuild", "id", id, Confidence.HIGHEST);
+                child.addEvidence(EvidenceType.VENDOR, "msbuild", "id", id, Confidence.MEDIUM);
                 child.addEvidence(EvidenceType.VERSION, "msbuild", "version", version, Confidence.HIGHEST);
 
                 if (id.indexOf('.') > 0) {
@@ -193,10 +194,12 @@ public class MSBuildProjectAnalyzer extends AbstractFileTypeAnalyzer {
                     // example: Microsoft.EntityFrameworkCore
                     child.addEvidence(EvidenceType.VENDOR, "msbuild", "id", parts[0], Confidence.MEDIUM);
                     child.addEvidence(EvidenceType.PRODUCT, "msbuild", "id", parts[1], Confidence.MEDIUM);
+                    child.addEvidence(EvidenceType.VENDOR, "msbuild", "id", parts[1], Confidence.LOW);
 
                     if (parts.length > 2) {
                         final String rest = id.substring(id.indexOf('.') + 1);
                         child.addEvidence(EvidenceType.PRODUCT, "msbuild", "id", rest, Confidence.MEDIUM);
+                        child.addEvidence(EvidenceType.VENDOR, "msbuild", "id", rest, Confidence.LOW);
                     }
                 } else {
                     // example: jQuery
@@ -315,7 +318,7 @@ public class MSBuildProjectAnalyzer extends AbstractFileTypeAnalyzer {
         if (directoryProps != null && directoryProps.isFile()) {
             final DirectoryBuildPropsParser parser = new DirectoryBuildPropsParser();
             try (FileInputStream fis = new FileInputStream(directoryProps);
-                    BOMInputStream bis = new BOMInputStream(fis)) {
+                    BOMInputStream bis = BOMInputStream.builder().setInputStream(fis).get()) {
                 //skip BOM if it exists
                 bis.getBOM();
                 entries = parser.parse(bis);
@@ -344,7 +347,7 @@ public class MSBuildProjectAnalyzer extends AbstractFileTypeAnalyzer {
         if (packages != null && packages.isFile()) {
             final DirectoryPackagesPropsParser parser = new DirectoryPackagesPropsParser();
             try (FileInputStream fis = new FileInputStream(packages);
-                    BOMInputStream bis = new BOMInputStream(fis)) {
+                    BOMInputStream bis = BOMInputStream.builder().setInputStream(fis).get()) {
                 //skip BOM if it exists
                 bis.getBOM();
                 return parser.parse(bis, props);

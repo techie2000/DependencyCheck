@@ -20,16 +20,6 @@ package org.owasp.dependencycheck.analyzer;
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
 import com.github.packageurl.PackageURLBuilder;
-import java.io.FileFilter;
-import java.io.IOException;
-import java.io.InputStream;
-import javax.annotation.concurrent.ThreadSafe;
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonObject;
-import javax.json.JsonReader;
-
-import org.apache.commons.io.FileUtils;
 import org.owasp.dependencycheck.Engine;
 import org.owasp.dependencycheck.analyzer.exception.AnalysisException;
 import org.owasp.dependencycheck.data.nvd.ecosystem.Ecosystem;
@@ -43,6 +33,16 @@ import org.owasp.dependencycheck.utils.FileFilterBuilder;
 import org.owasp.dependencycheck.utils.Settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.concurrent.ThreadSafe;
+import jakarta.json.Json;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonReader;
+import java.io.FileFilter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 
 /**
  * This analyzer is used to analyze the SWIFT Package Resolved
@@ -155,8 +155,8 @@ public class SwiftPackageResolvedAnalyzer extends AbstractFileTypeAnalyzer {
     private void analyzeSpmResolvedDependencies(Dependency spmResolved, Engine engine)
             throws AnalysisException, IOException {
 
-        try (InputStream in = FileUtils.openInputStream(spmResolved.getActualFile());
-                JsonReader resolved = Json.createReader(in)) {
+        try (InputStream in = Files.newInputStream(spmResolved.getActualFile().toPath());
+             JsonReader resolved = Json.createReader(in)) {
             final JsonObject file = resolved.readObject();
             final int fileVersion = file.getInt("version");
 
@@ -165,7 +165,8 @@ public class SwiftPackageResolvedAnalyzer extends AbstractFileTypeAnalyzer {
                     analyzeSpmResolvedDependenciesV1(spmResolved, engine, file);
                     break;
                 case 2:
-                    analyzeSpmResolvedDependenciesV2(spmResolved, engine, file);
+                case 3:
+                    analyzeSpmResolvedDependenciesV2And3(spmResolved, engine, file);
                     break;
                 default:
                     return;
@@ -209,14 +210,14 @@ public class SwiftPackageResolvedAnalyzer extends AbstractFileTypeAnalyzer {
     }
 
     /**
-     * Analyzes the version 2 of the Package.resolved file to extract evidence
+     * Analyzes the versions 2 and 3 of the Package.resolved file to extract evidence
      * for the dependency.
      *
      * @param spmResolved the dependency to analyze
      * @param engine the analysis engine
      * @param resolved the json object of the file to analyze
      */
-    private void analyzeSpmResolvedDependenciesV2(Dependency spmResolved, Engine engine, JsonObject resolved) {
+    private void analyzeSpmResolvedDependenciesV2And3(Dependency spmResolved, Engine engine, JsonObject resolved) {
         final JsonArray pins = resolved.getJsonArray("pins");
         if (pins == null) {
             return;

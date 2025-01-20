@@ -17,34 +17,34 @@
  */
 package org.owasp.dependencycheck.data.central;
 
+import org.apache.hc.client5.http.impl.classic.AbstractHttpClientResponseHandler;
+import org.apache.hc.core5.http.message.BasicHeader;
+import org.owasp.dependencycheck.utils.DownloadFailedException;
+import org.owasp.dependencycheck.utils.Downloader;
+import org.owasp.dependencycheck.utils.ResourceNotFoundException;
 import org.owasp.dependencycheck.utils.TooManyRequestsException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.concurrent.ThreadSafe;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
-import org.apache.commons.jcs.access.exception.CacheException;
+import org.apache.commons.jcs3.access.exception.CacheException;
 import org.owasp.dependencycheck.data.cache.DataCache;
 import org.owasp.dependencycheck.data.cache.DataCacheFactory;
 import org.owasp.dependencycheck.data.nexus.MavenArtifact;
 import org.owasp.dependencycheck.utils.Settings;
-import org.owasp.dependencycheck.utils.URLConnectionFactory;
-import org.owasp.dependencycheck.utils.XmlUtils;
+import org.owasp.dependencycheck.utils.ToXMLDocumentResponseHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
 
 /**
  * Class of methods to search Maven Central via Central.
@@ -105,7 +105,7 @@ public class CentralSearch {
         }
         this.query = queryStr;
         LOGGER.debug("Central Search Full URL: {}", String.format(query, rootURL, "[SHA1]"));
-        if (null != settings.getString(Settings.KEYS.PROXY_SERVER)) {
+        if (null != settings.getString(Settings.KEYS.PROXY_SERVER) || null != System.getProperty("https.proxyHost")) {
             useProxy = true;
             LOGGER.debug("Using proxy");
         } else {
@@ -154,68 +154,13 @@ public class CentralSearch {
 
         LOGGER.trace("Searching Central url {}", url);
 
-        // Determine if we need to use a proxy. The rules:
-        // 1) If the proxy is set, AND the setting is set to true, use the proxy
-        // 2) Otherwise, don't use the proxy (either the proxy isn't configured,
-        // or proxy is specifically set to false)
-        final URLConnectionFactory factory = new URLConnectionFactory(settings);
-        final HttpURLConnection conn = factory.createHttpURLConnection(url, useProxy);
-
-        conn.setDoOutput(true);
-
         // JSON would be more elegant, but there's not currently a dependency
         // on JSON, so don't want to add one just for this
-        conn.addRequestProperty("Accept", "application/xml");
-        conn.connect();
-
-        if (conn.getResponseCode() == 200) {
-            boolean missing = false;
-            try {
-                final DocumentBuilder builder = XmlUtils.buildSecureDocumentBuilder();
-                final Document doc = builder.parse(conn.getInputStream());
-                final XPath xpath = XPathFactory.newInstance().newXPath();
-                final String numFound = xpath.evaluate("/response/result/@numFound", doc);
-                if ("0".equals(numFound)) {
-                    missing = true;
-                } else {
-                    final NodeList docs = (NodeList) xpath.evaluate("/response/result/doc", doc, XPathConstants.NODESET);
-                    for (int i = 0; i < docs.getLength(); i++) {
-                        final String g = xpath.evaluate("./str[@name='g']", docs.item(i));
-                        LOGGER.trace("GroupId: {}", g);
-                        final String a = xpath.evaluate("./str[@name='a']", docs.item(i));
-                        LOGGER.trace("ArtifactId: {}", a);
-                        final String v = xpath.evaluate("./str[@name='v']", docs.item(i));
-                        final NodeList attributes = (NodeList) xpath.evaluate("./arr[@name='ec']/str", docs.item(i), XPathConstants.NODESET);
-                        boolean pomAvailable = false;
-                        boolean jarAvailable = false;
-                        for (int x = 0; x < attributes.getLength(); x++) {
-                            final String tmp = xpath.evaluate(".", attributes.item(x));
-                            if (".pom".equals(tmp)) {
-                                pomAvailable = true;
-                            } else if (".jar".equals(tmp)) {
-                                jarAvailable = true;
-                            }
-                        }
-                        final String centralContentUrl = settings.getString(Settings.KEYS.CENTRAL_CONTENT_URL);
-                        String artifactUrl = null;
-                        String pomUrl = null;
-                        if (jarAvailable) {
-                            //org/springframework/spring-core/3.2.0.RELEASE/spring-core-3.2.0.RELEASE.pom
-                            artifactUrl = centralContentUrl + g.replace('.', '/') + '/' + a + '/'
-                                    + v + '/' + a + '-' + v + ".jar";
-                        }
-                        if (pomAvailable) {
-                            //org/springframework/spring-core/3.2.0.RELEASE/spring-core-3.2.0.RELEASE.pom
-                            pomUrl = centralContentUrl + g.replace('.', '/') + '/' + a + '/'
-                                    + v + '/' + a + '-' + v + ".pom";
-                        }
-                        result.add(new MavenArtifact(g, a, v, artifactUrl, pomUrl));
-                    }
-                }
-            } catch (ParserConfigurationException | IOException | SAXException | XPathExpressionException e) {
-                // Anything else is jacked up XML stuff that we really can't recover from well
-                throw new IOException(e.getMessage(), e);
-            }
+        final BasicHeader acceptHeader = new BasicHeader("Accept", "application/xml");
+        final AbstractHttpClientResponseHandler<Document> handler = new ToXMLDocumentResponseHandler();
+        try {
+            final Document doc = Downloader.getInstance().fetchAndHandle(url, handler, List.of(acceptHeader), useProxy);
+            final boolean missing = addMavenArtifacts(doc, result);
 
             if (missing) {
                 if (cache != null) {
@@ -223,17 +168,73 @@ public class CentralSearch {
                 }
                 throw new FileNotFoundException("Artifact not found in Central");
             }
-        } else if (conn.getResponseCode() == 429) {
+        } catch (XPathExpressionException e) {
+            final String errorMessage = "Failed to parse MavenCentral XML Response: " + e.getMessage();
+            throw new IOException(errorMessage, e);
+        } catch (TooManyRequestsException e) {
             final String errorMessage = "Too many requests sent to MavenCentral; additional requests are being rejected.";
-            throw new TooManyRequestsException(errorMessage);
-        } else {
-            final String errorMessage = "Could not connect to MavenCentral (" + conn.getResponseCode() + "): " + conn.getResponseMessage();
-            throw new IOException(errorMessage);
+            throw new TooManyRequestsException(errorMessage, e);
+        } catch (ResourceNotFoundException | DownloadFailedException e) {
+            final String errorMessage = "Could not connect to MavenCentral " + e.getMessage();
+            throw new IOException(errorMessage, e);
+        } catch (URISyntaxException e) {
+            final String errorMessage = "Could not convert central search URL to a URI " + e.getMessage();
+            throw new IOException(errorMessage, e);
         }
         if (cache != null) {
             cache.put(sha1, result);
         }
         return result;
+    }
+
+    /**
+     * Collect the artifacts from a MavenCentral search result and add them to the list.
+     * @param doc The Document received in response to the SHA1 search-request
+     * @param result The list of MavenArtifacts to which found artifacts will be added
+     * @return Whether the given document holds no search results
+     */
+    private boolean addMavenArtifacts(Document doc, List<MavenArtifact> result) throws XPathExpressionException {
+        boolean missing = false;
+        final XPath xpath = XPathFactory.newInstance().newXPath();
+        final String numFound = xpath.evaluate("/response/result/@numFound", doc);
+        if ("0".equals(numFound)) {
+            missing = true;
+        } else {
+            final NodeList docs = (NodeList) xpath.evaluate("/response/result/doc", doc, XPathConstants.NODESET);
+            for (int i = 0; i < docs.getLength(); i++) {
+                final String g = xpath.evaluate("./str[@name='g']", docs.item(i));
+                LOGGER.trace("GroupId: {}", g);
+                final String a = xpath.evaluate("./str[@name='a']", docs.item(i));
+                LOGGER.trace("ArtifactId: {}", a);
+                final String v = xpath.evaluate("./str[@name='v']", docs.item(i));
+                final NodeList attributes = (NodeList) xpath.evaluate("./arr[@name='ec']/str", docs.item(i), XPathConstants.NODESET);
+                boolean pomAvailable = false;
+                boolean jarAvailable = false;
+                for (int x = 0; x < attributes.getLength(); x++) {
+                    final String tmp = xpath.evaluate(".", attributes.item(x));
+                    if (".pom".equals(tmp)) {
+                        pomAvailable = true;
+                    } else if (".jar".equals(tmp)) {
+                        jarAvailable = true;
+                    }
+                }
+                final String centralContentUrl = settings.getString(Settings.KEYS.CENTRAL_CONTENT_URL);
+                String artifactUrl = null;
+                String pomUrl = null;
+                if (jarAvailable) {
+                    //org/springframework/spring-core/3.2.0.RELEASE/spring-core-3.2.0.RELEASE.pom
+                    artifactUrl = centralContentUrl + g.replace('.', '/') + '/' + a + '/'
+                            + v + '/' + a + '-' + v + ".jar";
+                }
+                if (pomAvailable) {
+                    //org/springframework/spring-core/3.2.0.RELEASE/spring-core-3.2.0.RELEASE.pom
+                    pomUrl = centralContentUrl + g.replace('.', '/') + '/' + a + '/'
+                            + v + '/' + a + '-' + v + ".pom";
+                }
+                result.add(new MavenArtifact(g, a, v, artifactUrl, pomUrl));
+            }
+        }
+        return missing;
     }
 
     /**
@@ -252,4 +253,5 @@ public class CentralSearch {
         }
         return false;
     }
+
 }

@@ -20,6 +20,8 @@ package org.owasp.dependencycheck.taskdefs;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import org.apache.tools.ant.BuildException;
@@ -35,14 +37,17 @@ import org.owasp.dependencycheck.agent.DependencyCheckScanAgent;
 import org.owasp.dependencycheck.data.nvdcve.DatabaseException;
 import org.owasp.dependencycheck.dependency.Dependency;
 import org.owasp.dependencycheck.dependency.Vulnerability;
+import org.owasp.dependencycheck.dependency.naming.Identifier;
 import org.owasp.dependencycheck.exception.ExceptionCollection;
 import org.owasp.dependencycheck.exception.ReportException;
 import org.owasp.dependencycheck.reporting.ReportGenerator.Format;
+import org.owasp.dependencycheck.utils.Downloader;
+import org.owasp.dependencycheck.utils.InvalidSettingException;
 import org.owasp.dependencycheck.utils.Settings;
 import org.owasp.dependencycheck.utils.SeverityUtil;
 import org.slf4j.impl.StaticLoggerBinder;
-//CSOFF: MethodCount
 
+//CSOFF: MethodCount
 /**
  * An Ant task definition to execute dependency-check during an Ant build.
  *
@@ -89,27 +94,6 @@ public class Check extends Update {
      * Sets whether or not the Node Audit Analyzer should use a local cache.
      */
     private Boolean nodeAuditSkipDevDependencies;
-    /**
-     * Whether or not the RetireJS Analyzer is enabled.
-     */
-    private Boolean retireJsAnalyzerEnabled;
-    /**
-     * The URL to the RetireJS JSON data.
-     */
-    private String retireJsUrl;
-    /**
-     * The user to download URL to the RetireJS JSON data.
-     */
-    private String retireJsUrlUser;
-    /**
-     * The password to download URL to the RetireJS JSON data.
-     */
-    private String retireJsUrlPassword;
-    /**
-     * Whether or not the RetireJS Analyzer will be updated regardless of the
-     * `autoupdate` settings. Defaults to false.
-     */
-    private Boolean retireJsAnalyzerForceUpdate;
     /**
      * The list of filters (regular expressions) used by the RetireJS Analyzer
      * to exclude files that contain matching content..
@@ -237,13 +221,13 @@ public class Check extends Update {
      */
     private Boolean autoUpdate;
     /**
-     * The report format to be generated (HTML, XML, JUNIT, CSV, JSON, SARIF,
-     * JENKINS, ALL). Default is HTML.
+     * The report format to be generated (HTML, XML, CSV, JSON, JUNIT, SARIF,
+     * JENKINS, GITLAB, ALL). Default is HTML.
      */
     private String reportFormat = "HTML";
     /**
-     * The report format to be generated (HTML, XML, JUNIT, CSV, JSON, SARIF,
-     * JENKINS, ALL). Default is HTML.
+     * The report format to be generated (HTML, XML, CSV, JSON, JUNIT, SARIF,
+     * JENKINS, GITLAB, ALL). Default is HTML.
      */
     private final List<String> reportFormats = new ArrayList<>();
     /**
@@ -283,14 +267,6 @@ public class Check extends Update {
      */
     private Boolean archiveAnalyzerEnabled;
     /**
-     * Whether or not the Known Exploited Vulnerability Analyzer is enabled.
-     */
-    private Boolean knownExploitedEnabled;
-    /**
-     * The URL to the known exploited vulnerabilities JSON datafeed.
-     */
-    private String knownExploitedUrl;
-    /**
      * Whether or not the .NET Nuspec Analyzer is enabled.
      */
     private Boolean nuspecAnalyzerEnabled;
@@ -299,9 +275,17 @@ public class Check extends Update {
      */
     private Boolean nugetconfAnalyzerEnabled;
     /**
+     * Whether or not the Libman Analyzer is enabled.
+     */
+    private Boolean libmanAnalyzerEnabled;
+    /**
      * Whether or not the PHP Composer Analyzer is enabled.
      */
     private Boolean composerAnalyzerEnabled;
+    /**
+     * Whether or not the PHP Composer Analyzer will skip "packages-dev".
+     */
+    private Boolean composerAnalyzerSkipDev;
     /**
      * Whether or not the Perl CPAN File Analyzer is enabled.
      */
@@ -352,6 +336,10 @@ public class Check extends Update {
      * Whether or not the CocoaPods Analyzer is enabled.
      */
     private Boolean cocoapodsAnalyzerEnabled;
+    /**
+     * Whether or not the Carthage Analyzer is enabled.
+     */
+    private Boolean carthageAnalyzerEnabled;
 
     /**
      * Whether or not the Swift package Analyzer is enabled.
@@ -416,9 +404,31 @@ public class Check extends Update {
      * The Artifactory bearer token.
      */
     private String artifactoryAnalyzerBearerToken;
+    /**
+     * Whether the version check is enabled
+     */
+    private Boolean versionCheckEnabled;
 
+    /**
+     * whether an unsused suppression rule should get force the build to fail
+     */
+    private boolean failBuildOnUnusedSuppressionRule = false;
+
+    /**
+     * The username to download user-authored suppression files from an HTTP Basic auth protected location.
+     */
+    private String suppressionFileUser;
+    /**
+     * The password to download user-authored suppression files from an HTTP Basic auth protected location.
+     */
+    private String suppressionFilePassword;
+    /**
+     * The token to download user-authored suppression files from an HTTP Bearer auth protected location.
+     */
+    private String suppressionFileBearerToken;
+
+    //region Code copied from org.apache.tools.ant.taskdefs.PathConvert
     //The following code was copied Apache Ant PathConvert
-    //BEGIN COPY from org.apache.tools.ant.taskdefs.PathConvert
     /**
      * Path to be converted
      */
@@ -439,28 +449,6 @@ public class Check extends Update {
             throw new BuildException("Nested elements are not allowed when using the refId attribute.");
         }
         getPath().add(rc);
-    }
-
-    /**
-     * Add a suppression file.
-     * <p>
-     * This is called by Ant with the configured {@link SuppressionFile}.
-     *
-     * @param suppressionFile the suppression file to add.
-     */
-    public void addConfiguredSuppressionFile(final SuppressionFile suppressionFile) {
-        suppressionFiles.add(suppressionFile.getPath());
-    }
-
-    /**
-     * Add a report format.
-     * <p>
-     * This is called by Ant with the configured {@link ReportFormat}.
-     *
-     * @param reportFormat the reportFormat to add.
-     */
-    public void addConfiguredReportFormat(final ReportFormat reportFormat) {
-        reportFormats.add(reportFormat.getFormat());
     }
 
     /**
@@ -519,7 +507,7 @@ public class Check extends Update {
             getPath().add((ResourceCollection) o);
         }
     }
-    // END COPY from org.apache.tools.ant.taskdefs
+    //endregion COPIED from org.apache.tools.ant.taskdefs
 
     /**
      * Construct a new DependencyCheckTask.
@@ -529,6 +517,38 @@ public class Check extends Update {
         // Call this before Dependency Check Core starts logging anything - this way, all SLF4J messages from
         // core end up coming through this tasks logger
         StaticLoggerBinder.getSingleton().setTask(this);
+    }
+
+    /**
+     * Add a suppression file.
+     * <p>
+     * This is called by Ant with the configured {@link SuppressionFile}.
+     *
+     * @param suppressionFile the suppression file to add.
+     */
+    public void addConfiguredSuppressionFile(final SuppressionFile suppressionFile) {
+        suppressionFiles.add(suppressionFile.getPath());
+    }
+
+    /**
+     * Add a report format.
+     * <p>
+     * This is called by Ant with the configured {@link ReportFormat}.
+     *
+     * @param reportFormat the reportFormat to add.
+     */
+    public void addConfiguredReportFormat(final ReportFormat reportFormat) {
+        reportFormats.add(reportFormat.getFormat());
+    }
+
+    /**
+     * Sets whether the version check is enabled.
+     *
+     * @param versionCheckEnabled a Boolean indicating if the version check is
+     * enabled.
+     */
+    public void setVersionCheckEnabled(Boolean versionCheckEnabled) {
+        this.versionCheckEnabled = versionCheckEnabled;
     }
 
     /**
@@ -553,30 +573,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of reportOutputDirectory.
-     *
-     * @return the value of reportOutputDirectory
-     */
-    public String getReportOutputDirectory() {
-        return reportOutputDirectory;
-    }
-
-    /**
      * Set the value of reportOutputDirectory.
      *
      * @param reportOutputDirectory new value of reportOutputDirectory
      */
     public void setReportOutputDirectory(String reportOutputDirectory) {
         this.reportOutputDirectory = reportOutputDirectory;
-    }
-
-    /**
-     * Get the value of failBuildOnCVSS.
-     *
-     * @return the value of failBuildOnCVSS
-     */
-    public float getFailBuildOnCVSS() {
-        return failBuildOnCVSS;
     }
 
     /**
@@ -589,15 +591,6 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of junitFailOnCVSS.
-     *
-     * @return the value of junitFailOnCVSS
-     */
-    public float getJunitFailOnCVSS() {
-        return junitFailOnCVSS;
-    }
-
-    /**
      * Set the value of junitFailOnCVSS.
      *
      * @param junitFailOnCVSS new value of junitFailOnCVSS
@@ -607,30 +600,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of autoUpdate.
-     *
-     * @return the value of autoUpdate
-     */
-    public Boolean isAutoUpdate() {
-        return autoUpdate;
-    }
-
-    /**
      * Set the value of autoUpdate.
      *
      * @param autoUpdate new value of autoUpdate
      */
     public void setAutoUpdate(Boolean autoUpdate) {
         this.autoUpdate = autoUpdate;
-    }
-
-    /**
-     * Get the value of prettyPrint.
-     *
-     * @return the value of prettyPrint
-     */
-    public Boolean isPrettyPrint() {
-        return prettyPrint;
     }
 
     /**
@@ -665,15 +640,6 @@ public class Check extends Update {
     }
 
     /**
-     * Gets suppression file paths.
-     *
-     * @return the suppression files.
-     */
-    public List<String> getSuppressionFiles() {
-        return suppressionFiles;
-    }
-
-    /**
      * Set the value of suppressionFile.
      *
      * @param suppressionFile new value of suppressionFile
@@ -683,12 +649,30 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of hintsFile.
+     * Sets the username to download user-authored suppression files from an HTTP Basic auth protected location.
      *
-     * @return the value of hintsFile
+     * @param suppressionFileUser The username
      */
-    public String getHintsFile() {
-        return hintsFile;
+    public void setSuppressionFileUser(String suppressionFileUser) {
+        this.suppressionFileUser = suppressionFileUser;
+    }
+
+    /**
+     * Sets the password/token to download user-authored suppression files from an HTTP Basic auth protected location.
+     *
+     * @param suppressionFilePassword The password/token
+     */
+    public void setSuppressionFilePassword(String suppressionFilePassword) {
+        this.suppressionFilePassword = suppressionFilePassword;
+    }
+
+    /**
+     * Sets the token to download user-authored suppression files from an HTTP Bearer auth protected location.
+     *
+     * @param suppressionFileBearerToken The token
+     */
+    public void setSuppressionFileBearerToken(String suppressionFileBearerToken) {
+        this.suppressionFileBearerToken = suppressionFileBearerToken;
     }
 
     /**
@@ -701,30 +685,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of showSummary.
-     *
-     * @return the value of showSummary
-     */
-    public boolean isShowSummary() {
-        return showSummary;
-    }
-
-    /**
      * Set the value of showSummary.
      *
      * @param showSummary new value of showSummary
      */
     public void setShowSummary(boolean showSummary) {
         this.showSummary = showSummary;
-    }
-
-    /**
-     * Get the value of enableExperimental.
-     *
-     * @return the value of enableExperimental
-     */
-    public Boolean isEnableExperimental() {
-        return enableExperimental;
     }
 
     /**
@@ -737,30 +703,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of enableRetired.
-     *
-     * @return the value of enableRetired
-     */
-    public Boolean isEnableRetired() {
-        return enableRetired;
-    }
-
-    /**
      * Set the value of enableRetired.
      *
      * @param enableRetired new value of enableRetired
      */
     public void setEnableRetired(Boolean enableRetired) {
         this.enableRetired = enableRetired;
-    }
-
-    /**
-     * Returns whether or not the analyzer is enabled.
-     *
-     * @return true if the analyzer is enabled
-     */
-    public Boolean isJarAnalyzerEnabled() {
-        return jarAnalyzerEnabled;
     }
 
     /**
@@ -773,66 +721,12 @@ public class Check extends Update {
     }
 
     /**
-     * Returns whether or not the analyzer is enabled.
-     *
-     * @return true if the analyzer is enabled
-     */
-    public Boolean isArchiveAnalyzerEnabled() {
-        return archiveAnalyzerEnabled;
-    }
-
-    /**
      * Sets whether the analyzer is enabled.
      *
      * @param archiveAnalyzerEnabled the value of the new setting
      */
     public void setArchiveAnalyzerEnabled(Boolean archiveAnalyzerEnabled) {
         this.archiveAnalyzerEnabled = archiveAnalyzerEnabled;
-    }
-
-    /**
-     * Returns whether the analyzer is enabled.
-     *
-     * @return true if the analyzer is enabled
-     */
-    public Boolean isKnownExploitedEnabled() {
-        return knownExploitedEnabled;
-    }
-
-    /**
-     * Sets whether the analyzer is enabled.
-     *
-     * @param knownExploitedEnabled the value of the new setting
-     */
-    public void setKnownExploitedEnabled(Boolean knownExploitedEnabled) {
-        this.knownExploitedEnabled = knownExploitedEnabled;
-    }
-
-    /**
-     * Returns the knownExploitedUrl.
-     *
-     * @return the knownExploitedUrl
-     */
-    public String getKnownExploitedUrl() {
-        return knownExploitedUrl;
-    }
-
-    /**
-     * Sets the the knownExploitedUrl.
-     *
-     * @param knownExploitedUrl the URL
-     */
-    public void setKnownExploitedUrl(String knownExploitedUrl) {
-        this.knownExploitedUrl = knownExploitedUrl;
-    }
-
-    /**
-     * Returns whether or not the analyzer is enabled.
-     *
-     * @return true if the analyzer is enabled
-     */
-    public Boolean isAssemblyAnalyzerEnabled() {
-        return assemblyAnalyzerEnabled;
     }
 
     /**
@@ -845,39 +739,12 @@ public class Check extends Update {
     }
 
     /**
-     * Returns whether or not the analyzer is enabled.
-     *
-     * @return true if the analyzer is enabled
-     */
-    public Boolean isMSBuildAnalyzerEnabled() {
-        return msbuildAnalyzerEnabled;
-    }
-
-    /**
      * Sets whether or not the analyzer is enabled.
      *
      * @param msbuildAnalyzerEnabled the value of the new setting
      */
     public void setMSBuildAnalyzerEnabled(Boolean msbuildAnalyzerEnabled) {
         this.msbuildAnalyzerEnabled = msbuildAnalyzerEnabled;
-    }
-
-    /**
-     * Returns whether or not the analyzer is enabled.
-     *
-     * @return true if the analyzer is enabled
-     */
-    public Boolean isNuspecAnalyzerEnabled() {
-        return nuspecAnalyzerEnabled;
-    }
-
-    /**
-     * Returns whether or not the analyzer is enabled.
-     *
-     * @return true if the analyzer is enabled
-     */
-    public Boolean isNugetconfAnalyzerEnabled() {
-        return nugetconfAnalyzerEnabled;
     }
 
     /**
@@ -899,12 +766,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of composerAnalyzerEnabled.
+     * Sets whether or not the analyzer is enabled.
      *
-     * @return the value of composerAnalyzerEnabled
+     * @param libmanAnalyzerEnabled the value of the new setting
      */
-    public Boolean isComposerAnalyzerEnabled() {
-        return composerAnalyzerEnabled;
+    public void setLibmanAnalyzerEnabled(Boolean libmanAnalyzerEnabled) {
+        this.libmanAnalyzerEnabled = libmanAnalyzerEnabled;
     }
 
     /**
@@ -917,12 +784,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of cpanfileAnalyzerEnabled.
+     * Set the value of composerAnalyzerSkipDev.
      *
-     * @return the value of cpanfileAnalyzerEnabled
+     * @param composerAnalyzerSkipDev new value of composerAnalyzerSkipDev
      */
-    public Boolean isCpanfileAnalyzerEnabled() {
-        return cpanfileAnalyzerEnabled;
+    public void setComposerAnalyzerSkipDev(Boolean composerAnalyzerSkipDev) {
+        this.composerAnalyzerSkipDev = composerAnalyzerSkipDev;
     }
 
     /**
@@ -935,30 +802,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of autoconfAnalyzerEnabled.
-     *
-     * @return the value of autoconfAnalyzerEnabled
-     */
-    public Boolean isAutoconfAnalyzerEnabled() {
-        return autoconfAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of autoconfAnalyzerEnabled.
      *
      * @param autoconfAnalyzerEnabled new value of autoconfAnalyzerEnabled
      */
     public void setAutoconfAnalyzerEnabled(Boolean autoconfAnalyzerEnabled) {
         this.autoconfAnalyzerEnabled = autoconfAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of pipAnalyzerEnabled.
-     *
-     * @return the value of pipAnalyzerEnabled
-     */
-    public Boolean isPipAnalyzerEnabled() {
-        return pipAnalyzerEnabled;
     }
 
     /**
@@ -971,30 +820,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of pipfileAnalyzerEnabled.
-     *
-     * @return the value of pipfileAnalyzerEnabled
-     */
-    public Boolean isPipfileAnalyzerEnabled() {
-        return pipfileAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of pipfileAnalyzerEnabled.
      *
      * @param pipfileAnalyzerEnabled new value of pipfileAnalyzerEnabled
      */
     public void setPipfileAnalyzerEnabled(Boolean pipfileAnalyzerEnabled) {
         this.pipfileAnalyzerEnabled = pipfileAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of poetryAnalyzerEnabled.
-     *
-     * @return the value of poetryAnalyzerEnabled
-     */
-    public Boolean isPoetryAnalyzerEnabled() {
-        return poetryAnalyzerEnabled;
     }
 
     /**
@@ -1007,15 +838,6 @@ public class Check extends Update {
     }
 
     /**
-     * Returns if the Bundle Audit Analyzer is enabled.
-     *
-     * @return if the Bundle Audit Analyzer is enabled.
-     */
-    public Boolean isBundleAuditAnalyzerEnabled() {
-        return bundleAuditAnalyzerEnabled;
-    }
-
-    /**
      * Sets if the Bundle Audit Analyzer is enabled.
      *
      * @param bundleAuditAnalyzerEnabled whether or not the analyzer should be
@@ -1023,15 +845,6 @@ public class Check extends Update {
      */
     public void setBundleAuditAnalyzerEnabled(Boolean bundleAuditAnalyzerEnabled) {
         this.bundleAuditAnalyzerEnabled = bundleAuditAnalyzerEnabled;
-    }
-
-    /**
-     * Returns the path to the bundle audit executable.
-     *
-     * @return the path to the bundle audit executable
-     */
-    public String getBundleAuditPath() {
-        return bundleAuditPath;
     }
 
     /**
@@ -1055,26 +868,6 @@ public class Check extends Update {
     }
 
     /**
-     * Returns the path to the working directory that the bundle audit
-     * executable should be executed from.
-     *
-     * @return the path to the working directory that the bundle audit
-     * executable should be executed from.
-     */
-    public String getBundleAuditWorkingDirectory() {
-        return bundleAuditWorkingDirectory;
-    }
-
-    /**
-     * Returns if the cocoapods analyzer is enabled.
-     *
-     * @return if the cocoapods analyzer is enabled
-     */
-    public boolean isCocoapodsAnalyzerEnabled() {
-        return cocoapodsAnalyzerEnabled;
-    }
-
-    /**
      * Sets whether or not the cocoapods analyzer is enabled.
      *
      * @param cocoapodsAnalyzerEnabled the state of the cocoapods analyzer
@@ -1084,12 +877,12 @@ public class Check extends Update {
     }
 
     /**
-     * Returns whether or not the Swift package Analyzer is enabled.
+     * Sets whether or not the Carthage analyzer is enabled.
      *
-     * @return whether or not the Swift package Analyzer is enabled
+     * @param carthageAnalyzerEnabled the state of the Carthage analyzer
      */
-    public Boolean isSwiftPackageManagerAnalyzerEnabled() {
-        return swiftPackageManagerAnalyzerEnabled;
+    public void setCarthageAnalyzerEnabled(Boolean carthageAnalyzerEnabled) {
+        this.carthageAnalyzerEnabled = carthageAnalyzerEnabled;
     }
 
     /**
@@ -1103,15 +896,6 @@ public class Check extends Update {
     }
 
     /**
-     * Returns whether or not the Swift package resolved Analyzer is enabled.
-     *
-     * @return whether or not the Swift package resolved Analyzer is enabled
-     */
-    public Boolean isSwiftPackageResolvedAnalyzerEnabled() {
-        return swiftPackageResolvedAnalyzerEnabled;
-    }
-
-    /**
      * Sets the enabled state of the swift package manager analyzer.
      *
      * @param swiftPackageResolvedAnalyzerEnabled the enabled state of the swift
@@ -1119,15 +903,6 @@ public class Check extends Update {
      */
     public void setSwiftPackageResolvedAnalyzerEnabled(Boolean swiftPackageResolvedAnalyzerEnabled) {
         this.swiftPackageResolvedAnalyzerEnabled = swiftPackageResolvedAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of opensslAnalyzerEnabled.
-     *
-     * @return the value of opensslAnalyzerEnabled
-     */
-    public Boolean isOpensslAnalyzerEnabled() {
-        return opensslAnalyzerEnabled;
     }
 
     /**
@@ -1140,30 +915,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of nodeAnalyzerEnabled.
-     *
-     * @return the value of nodeAnalyzerEnabled
-     */
-    public Boolean isNodeAnalyzerEnabled() {
-        return nodeAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of nodeAnalyzerEnabled.
      *
      * @param nodeAnalyzerEnabled new value of nodeAnalyzerEnabled
      */
     public void setNodeAnalyzerEnabled(Boolean nodeAnalyzerEnabled) {
         this.nodeAnalyzerEnabled = nodeAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of nodeAuditAnalyzerEnabled.
-     *
-     * @return the value of nodeAuditAnalyzerEnabled
-     */
-    public Boolean isNodeAuditAnalyzerEnabled() {
-        return nodeAuditAnalyzerEnabled;
     }
 
     /**
@@ -1176,30 +933,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of yarnAuditAnalyzerEnabled.
-     *
-     * @return the value of yarnAuditAnalyzerEnabled
-     */
-    public Boolean isYarnAuditAnalyzerEnabled() {
-        return yarnAuditAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of yarnAuditAnalyzerEnabled.
      *
      * @param yarnAuditAnalyzerEnabled new value of yarnAuditAnalyzerEnabled
      */
     public void setYarnAuditAnalyzerEnabled(Boolean yarnAuditAnalyzerEnabled) {
         this.yarnAuditAnalyzerEnabled = yarnAuditAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of pnpmAuditAnalyzerEnabled.
-     *
-     * @return the value of pnpmAuditAnalyzerEnabled
-     */
-    public Boolean isPnpmAuditAnalyzerEnabled() {
-        return pnpmAuditAnalyzerEnabled;
     }
 
     /**
@@ -1212,30 +951,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of nodeAuditAnalyzerUseCache.
-     *
-     * @return the value of nodeAuditAnalyzerUseCache
-     */
-    public Boolean isNodeAuditAnalyzerUseCache() {
-        return nodeAuditAnalyzerUseCache;
-    }
-
-    /**
      * Set the value of nodeAuditAnalyzerUseCache.
      *
      * @param nodeAuditAnalyzerUseCache new value of nodeAuditAnalyzerUseCache
      */
     public void setNodeAuditAnalyzerUseCache(Boolean nodeAuditAnalyzerUseCache) {
         this.nodeAuditAnalyzerUseCache = nodeAuditAnalyzerUseCache;
-    }
-
-    /**
-     * Get the value of nodePackageSkipDevDependencies.
-     *
-     * @return the value of nodePackageSkipDevDependencies
-     */
-    public Boolean isNodePackageAnalyzerSkipDevDependencies() {
-        return nodePackageSkipDevDependencies;
     }
 
     /**
@@ -1249,15 +970,6 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of nodeAuditSkipDevDependencies.
-     *
-     * @return the value of nodeAuditSkipDevDependencies
-     */
-    public Boolean isNodeAuditAnalyzerSkipDevDependencies() {
-        return nodeAuditSkipDevDependencies;
-    }
-
-    /**
      * Set the value of nodeAuditSkipDevDependencies.
      *
      * @param nodeAuditSkipDevDependencies new value of
@@ -1268,106 +980,6 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of retireJsAnalyzerEnabled.
-     *
-     * @return the value of retireJsAnalyzerEnabled
-     */
-    public Boolean isRetireJsAnalyzerEnabled() {
-        return retireJsAnalyzerEnabled;
-    }
-
-    /**
-     * Set the value of retireJsAnalyzerEnabled.
-     *
-     * @param retireJsAnalyzerEnabled new value of retireJsAnalyzerEnabled
-     */
-    public void setRetireJsAnalyzerEnabled(Boolean retireJsAnalyzerEnabled) {
-        this.retireJsAnalyzerEnabled = retireJsAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of Retire JS repository URL.
-     *
-     * @return the value of retireJsUrl
-     */
-    public String getRetireJsUrl() {
-        return retireJsUrl;
-    }
-
-    /**
-     * Set the value of the Retire JS repository URL.
-     *
-     * @param retireJsUrl new value of retireJsUrl
-     */
-    public void setRetireJsUrl(String retireJsUrl) {
-        this.retireJsUrl = retireJsUrl;
-    }
-
-    /**
-     * Get the value of User Retire JS repository URL.
-     *
-     * @return the value of retireJsUrlUser
-     */
-    public String getRetireJsUrlUser() {
-        return retireJsUrlUser;
-    }
-
-    /**
-     * Set the value of the User Retire JS repository URL.
-     *
-     * @param retireJsUrlUser new value of retireJsUrlUser
-     */
-    public void setRetireJsUrlUser(String retireJsUrlUser) {
-        this.retireJsUrlUser = retireJsUrlUser;
-    }
-
-    /**
-     * Get the value of Password Retire JS repository URL.
-     *
-     * @return the value of retireJsUrlPassword
-     */
-    public String getRetireJsUrlPassword() {
-        return retireJsUrlPassword;
-    }
-
-    /**
-     * Set the value of the Password Retire JS repository URL.
-     *
-     * @param retireJsUrlPassword new value of retireJsUrlPassword
-     */
-    public void setRetireJsUrlPassword(String retireJsUrlPassword) {
-        this.retireJsUrlPassword = retireJsUrlPassword;
-    }
-
-    /**
-     * Get the value of retireJsAnalyzerEnabled.
-     *
-     * @return the value of retireJsAnalyzerEnabled
-     */
-    public Boolean isRetireJsAnalyzerForceUpdate() {
-        return retireJsAnalyzerForceUpdate;
-    }
-
-    /**
-     * Set the value of retireJsAnalyzerForceUpdate.
-     *
-     * @param retireJsAnalyzerForceUpdate new value of
-     * retireJsAnalyzerForceUpdate
-     */
-    public void setRetireJsAnalyzerForceUpdate(Boolean retireJsAnalyzerForceUpdate) {
-        this.retireJsAnalyzerForceUpdate = retireJsAnalyzerForceUpdate;
-    }
-
-    /**
-     * Get the value of retirejsFilterNonVulnerable.
-     *
-     * @return the value of retirejsFilterNonVulnerable
-     */
-    public Boolean isRetirejsFilterNonVulnerable() {
-        return retirejsFilterNonVulnerable;
-    }
-
-    /**
      * Set the value of retirejsFilterNonVulnerable.
      *
      * @param retirejsFilterNonVulnerable new value of
@@ -1375,15 +987,6 @@ public class Check extends Update {
      */
     public void setRetirejsFilterNonVulnerable(Boolean retirejsFilterNonVulnerable) {
         this.retirejsFilterNonVulnerable = retirejsFilterNonVulnerable;
-    }
-
-    /**
-     * Gets retire JS Analyzers file content filters.
-     *
-     * @return retire JS Analyzers file content filters
-     */
-    public List<String> getRetirejsFilters() {
-        return retirejsFilters;
     }
 
     /**
@@ -1399,15 +1002,6 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of rubygemsAnalyzerEnabled.
-     *
-     * @return the value of rubygemsAnalyzerEnabled
-     */
-    public Boolean isRubygemsAnalyzerEnabled() {
-        return rubygemsAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of rubygemsAnalyzerEnabled.
      *
      * @param rubygemsAnalyzerEnabled new value of rubygemsAnalyzerEnabled
@@ -1417,30 +1011,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of pyPackageAnalyzerEnabled.
-     *
-     * @return the value of pyPackageAnalyzerEnabled
-     */
-    public Boolean isPyPackageAnalyzerEnabled() {
-        return pyPackageAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of pyPackageAnalyzerEnabled.
      *
      * @param pyPackageAnalyzerEnabled new value of pyPackageAnalyzerEnabled
      */
     public void setPyPackageAnalyzerEnabled(Boolean pyPackageAnalyzerEnabled) {
         this.pyPackageAnalyzerEnabled = pyPackageAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of pyDistributionAnalyzerEnabled.
-     *
-     * @return the value of pyDistributionAnalyzerEnabled
-     */
-    public Boolean isPyDistributionAnalyzerEnabled() {
-        return pyDistributionAnalyzerEnabled;
     }
 
     /**
@@ -1454,15 +1030,6 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of mixAuditAnalyzerEnabled.
-     *
-     * @return the value of mixAuditAnalyzerEnabled
-     */
-    public Boolean getMixAuditAnalyzerEnabled() {
-        return mixAuditAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of mixAuditAnalyzerEnabled.
      *
      * @param mixAuditAnalyzerEnabled new value of mixAuditAnalyzerEnabled
@@ -1472,14 +1039,13 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of centralAnalyzerEnabled.
+     * Sets the path to the mix audit executable.
      *
-     * @return the value of centralAnalyzerEnabled
+     * @param mixAuditPath the path to the bundle audit executable
      */
-    public Boolean isCentralAnalyzerEnabled() {
-        return centralAnalyzerEnabled;
+    public void setMixAuditPath(String mixAuditPath) {
+        this.mixAuditPath = mixAuditPath;
     }
-
     /**
      * Set the value of centralAnalyzerEnabled.
      *
@@ -1487,15 +1053,6 @@ public class Check extends Update {
      */
     public void setCentralAnalyzerEnabled(Boolean centralAnalyzerEnabled) {
         this.centralAnalyzerEnabled = centralAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of centralAnalyzerUseCache.
-     *
-     * @return the value of centralAnalyzerUseCache
-     */
-    public Boolean isCentralAnalyzerUseCache() {
-        return centralAnalyzerUseCache;
     }
 
     /**
@@ -1508,30 +1065,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of nexusAnalyzerEnabled.
-     *
-     * @return the value of nexusAnalyzerEnabled
-     */
-    public Boolean isNexusAnalyzerEnabled() {
-        return nexusAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of nexusAnalyzerEnabled.
      *
      * @param nexusAnalyzerEnabled new value of nexusAnalyzerEnabled
      */
     public void setNexusAnalyzerEnabled(Boolean nexusAnalyzerEnabled) {
         this.nexusAnalyzerEnabled = nexusAnalyzerEnabled;
-    }
-
-    /**
-     * Get the value of golangDepEnabled.
-     *
-     * @return the value of golangDepEnabled
-     */
-    public Boolean isGolangDepEnabled() {
-        return golangDepEnabled;
     }
 
     /**
@@ -1544,30 +1083,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of golangModEnabled.
-     *
-     * @return the value of golangModEnabled
-     */
-    public Boolean isGoModDepEnabled() {
-        return golangModEnabled;
-    }
-
-    /**
      * Set the value of golangModEnabled.
      *
      * @param golangModEnabled new value of golangModEnabled
      */
     public void setGolangModEnabled(Boolean golangModEnabled) {
         this.golangModEnabled = golangModEnabled;
-    }
-
-    /**
-     * Get the value of dartAnalyzerEnabled.
-     *
-     * @return the value of dartAnalyzerEnabled
-     */
-    public Boolean isDartAnalyzerEnabled() {
-        return dartAnalyzerEnabled;
     }
 
     /**
@@ -1580,30 +1101,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of pathToYarn.
-     *
-     * @return the value of pathToYarn
-     */
-    public String getPathToYarn() {
-        return pathToYarn;
-    }
-
-    /**
      * Set the value of pathToYarn.
      *
      * @param pathToYarn new value of pathToYarn
      */
     public void setPathToYarn(String pathToYarn) {
         this.pathToYarn = pathToYarn;
-    }
-
-    /**
-     * Get the value of pathToPnpm.
-     *
-     * @return the value of pathToPnpm
-     */
-    public String getPathToPnpm() {
-        return pathToPnpm;
     }
 
     /**
@@ -1616,30 +1119,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of pathToCore.
-     *
-     * @return the value of pathToCore
-     */
-    public String getPathToGo() {
-        return pathToGo;
-    }
-
-    /**
      * Set the value of pathToGo.
      *
      * @param pathToGo new value of pathToGo
      */
     public void setPathToGo(String pathToGo) {
         this.pathToGo = pathToGo;
-    }
-
-    /**
-     * Get the value of nexusUrl.
-     *
-     * @return the value of nexusUrl
-     */
-    public String getNexusUrl() {
-        return nexusUrl;
     }
 
     /**
@@ -1652,30 +1137,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of nexusUser.
-     *
-     * @return the value of nexusUser
-     */
-    public String getNexusUser() {
-        return nexusUser;
-    }
-
-    /**
      * Set the value of nexusUser.
      *
      * @param nexusUser new value of nexusUser
      */
     public void setNexusUser(String nexusUser) {
         this.nexusUser = nexusUser;
-    }
-
-    /**
-     * Get the value of nexusPassword.
-     *
-     * @return the value of nexusPassword
-     */
-    public String getNexusPassword() {
-        return nexusPassword;
     }
 
     /**
@@ -1688,30 +1155,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of nexusUsesProxy.
-     *
-     * @return the value of nexusUsesProxy
-     */
-    public Boolean isNexusUsesProxy() {
-        return nexusUsesProxy;
-    }
-
-    /**
      * Set the value of nexusUsesProxy.
      *
      * @param nexusUsesProxy new value of nexusUsesProxy
      */
     public void setNexusUsesProxy(Boolean nexusUsesProxy) {
         this.nexusUsesProxy = nexusUsesProxy;
-    }
-
-    /**
-     * Get the value of zipExtensions.
-     *
-     * @return the value of zipExtensions
-     */
-    public String getZipExtensions() {
-        return zipExtensions;
     }
 
     /**
@@ -1724,30 +1173,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of pathToCore.
-     *
-     * @return the value of pathToCore
-     */
-    public String getPathToDotnetCore() {
-        return pathToCore;
-    }
-
-    /**
      * Set the value of pathToCore.
      *
      * @param pathToCore new value of pathToCore
      */
     public void setPathToDotnetCore(String pathToCore) {
         this.pathToCore = pathToCore;
-    }
-
-    /**
-     * Get value of {@link #ossindexAnalyzerEnabled}.
-     *
-     * @return the value of ossindexAnalyzerEnabled
-     */
-    public Boolean isOssindexAnalyzerEnabled() {
-        return ossindexAnalyzerEnabled;
     }
 
     /**
@@ -1760,30 +1191,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get value of {@link #ossindexAnalyzerUseCache}.
-     *
-     * @return the value of ossindexAnalyzerUseCache
-     */
-    public Boolean isOssindexAnalyzerUseCache() {
-        return ossindexAnalyzerUseCache;
-    }
-
-    /**
      * Set value of {@link #ossindexAnalyzerUseCache}.
      *
      * @param ossindexAnalyzerUseCache new value of ossindexAnalyzerUseCache
      */
     public void setOssindexAnalyzerUseCache(Boolean ossindexAnalyzerUseCache) {
         this.ossindexAnalyzerUseCache = ossindexAnalyzerUseCache;
-    }
-
-    /**
-     * Get value of {@link #ossindexAnalyzerUrl}.
-     *
-     * @return the value of ossindexAnalyzerUrl
-     */
-    public String getOssindexAnalyzerUrl() {
-        return ossindexAnalyzerUrl;
     }
 
     /**
@@ -1796,15 +1209,6 @@ public class Check extends Update {
     }
 
     /**
-     * Get value of {@link #ossindexAnalyzerUsername}.
-     *
-     * @return the value of ossindexAnalyzerUsername
-     */
-    public String getOssindexAnalyzerUsername() {
-        return ossindexAnalyzerUsername;
-    }
-
-    /**
      * Set value of {@link #ossindexAnalyzerUsername}.
      *
      * @param ossindexAnalyzerUsername new value of ossindexAnalyzerUsername
@@ -1814,30 +1218,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get value of {@link #ossindexAnalyzerPassword}.
-     *
-     * @return the value of ossindexAnalyzerPassword
-     */
-    public String getOssindexAnalyzerPassword() {
-        return ossindexAnalyzerPassword;
-    }
-
-    /**
      * Set value of {@link #ossindexAnalyzerPassword}.
      *
      * @param ossindexAnalyzerPassword new value of ossindexAnalyzerPassword
      */
     public void setOssindexAnalyzerPassword(String ossindexAnalyzerPassword) {
         this.ossindexAnalyzerPassword = ossindexAnalyzerPassword;
-    }
-
-    /**
-     * Get value of {@link #ossIndexAnalyzerWarnOnlyOnRemoteErrors}.
-     *
-     * @return the value of ossIndexWarnOnlyOnRemoteErrors
-     */
-    public Boolean getOssIndexWarnOnlyOnRemoteErrors() {
-        return ossIndexAnalyzerWarnOnlyOnRemoteErrors;
     }
 
     /**
@@ -1851,30 +1237,12 @@ public class Check extends Update {
     }
 
     /**
-     * Get the value of cmakeAnalyzerEnabled.
-     *
-     * @return the value of cmakeAnalyzerEnabled
-     */
-    public Boolean isCmakeAnalyzerEnabled() {
-        return cmakeAnalyzerEnabled;
-    }
-
-    /**
      * Set the value of cmakeAnalyzerEnabled.
      *
      * @param cmakeAnalyzerEnabled new value of cmakeAnalyzerEnabled
      */
     public void setCmakeAnalyzerEnabled(Boolean cmakeAnalyzerEnabled) {
         this.cmakeAnalyzerEnabled = cmakeAnalyzerEnabled;
-    }
-
-    /**
-     * Returns the value of artifactoryAnalyzerEnabled.
-     *
-     * @return the value of artifactoryAnalyzerEnabled
-     */
-    public Boolean getArtifactoryAnalyzerEnabled() {
-        return artifactoryAnalyzerEnabled;
     }
 
     /**
@@ -1887,30 +1255,12 @@ public class Check extends Update {
     }
 
     /**
-     * Returns the value of artifactoryAnalyzerUrl.
-     *
-     * @return the value of artifactoryAnalyzerUrl
-     */
-    public String getArtifactoryAnalyzerUrl() {
-        return artifactoryAnalyzerUrl;
-    }
-
-    /**
      * Set the value of artifactoryAnalyzerUrl.
      *
      * @param artifactoryAnalyzerUrl new value of artifactoryAnalyzerUrl
      */
     public void setArtifactoryAnalyzerUrl(String artifactoryAnalyzerUrl) {
         this.artifactoryAnalyzerUrl = artifactoryAnalyzerUrl;
-    }
-
-    /**
-     * Returns the value of artifactoryAnalyzerUseProxy.
-     *
-     * @return the value of artifactoryAnalyzerUseProxy
-     */
-    public Boolean getArtifactoryAnalyzerUseProxy() {
-        return artifactoryAnalyzerUseProxy;
     }
 
     /**
@@ -1924,15 +1274,6 @@ public class Check extends Update {
     }
 
     /**
-     * Returns the value of artifactoryAnalyzerParallelAnalysis.
-     *
-     * @return the value of artifactoryAnalyzerParallelAnalysis
-     */
-    public Boolean getArtifactoryAnalyzerParallelAnalysis() {
-        return artifactoryAnalyzerParallelAnalysis;
-    }
-
-    /**
      * Set the value of artifactoryAnalyzerParallelAnalysis.
      *
      * @param artifactoryAnalyzerParallelAnalysis new value of
@@ -1940,15 +1281,6 @@ public class Check extends Update {
      */
     public void setArtifactoryAnalyzerParallelAnalysis(Boolean artifactoryAnalyzerParallelAnalysis) {
         this.artifactoryAnalyzerParallelAnalysis = artifactoryAnalyzerParallelAnalysis;
-    }
-
-    /**
-     * Returns the value of artifactoryAnalyzerUsername.
-     *
-     * @return the value of artifactoryAnalyzerUsername
-     */
-    public String getArtifactoryAnalyzerUsername() {
-        return artifactoryAnalyzerUsername;
     }
 
     /**
@@ -1962,15 +1294,6 @@ public class Check extends Update {
     }
 
     /**
-     * Returns the value of artifactoryAnalyzerApiToken.
-     *
-     * @return the value of artifactoryAnalyzerApiToken
-     */
-    public String getArtifactoryAnalyzerApiToken() {
-        return artifactoryAnalyzerApiToken;
-    }
-
-    /**
      * Set the value of artifactoryAnalyzerApiToken.
      *
      * @param artifactoryAnalyzerApiToken new value of
@@ -1978,15 +1301,6 @@ public class Check extends Update {
      */
     public void setArtifactoryAnalyzerApiToken(String artifactoryAnalyzerApiToken) {
         this.artifactoryAnalyzerApiToken = artifactoryAnalyzerApiToken;
-    }
-
-    /**
-     * Returns the value of artifactoryAnalyzerBearerToken.
-     *
-     * @return the value of artifactoryAnalyzerBearerToken
-     */
-    public String getArtifactoryAnalyzerBearerToken() {
-        return artifactoryAnalyzerBearerToken;
     }
 
     /**
@@ -1999,6 +1313,16 @@ public class Check extends Update {
         this.artifactoryAnalyzerBearerToken = artifactoryAnalyzerBearerToken;
     }
 
+    /**
+     * Set the value of failBuildOnUnusedSuppressionRule.
+     *
+     * @param failBuildOnUnusedSuppressionRule new value of
+     * failBuildOnUnusedSuppressionRule
+     */
+    public void setFailBuildOnUnusedSuppressionRule(boolean failBuildOnUnusedSuppressionRule) {
+        this.failBuildOnUnusedSuppressionRule = failBuildOnUnusedSuppressionRule;
+    }
+
     //see note on `dealWithReferences()` for information on this suppression
     @SuppressWarnings("squid:RedundantThrowsDeclarationCheck")
     @Override
@@ -2006,6 +1330,11 @@ public class Check extends Update {
         dealWithReferences();
         validateConfiguration();
         populateSettings();
+        try {
+            Downloader.getInstance().configure(getSettings());
+        } catch (InvalidSettingException e) {
+            throw new BuildException(e);
+        }
         try (Engine engine = new Engine(Check.class.getClassLoader(), getSettings())) {
             for (Resource resource : getPath()) {
                 final FileProvider provider = resource.as(FileProvider.class);
@@ -2100,6 +1429,10 @@ public class Check extends Update {
         super.populateSettings();
         getSettings().setBooleanIfNotNull(Settings.KEYS.AUTO_UPDATE, autoUpdate);
         getSettings().setArrayIfNotEmpty(Settings.KEYS.SUPPRESSION_FILE, suppressionFiles);
+        getSettings().setStringIfNotEmpty(Settings.KEYS.SUPPRESSION_FILE_USER, suppressionFileUser);
+        getSettings().setStringIfNotEmpty(Settings.KEYS.SUPPRESSION_FILE_PASSWORD, suppressionFilePassword);
+        getSettings().setStringIfNotEmpty(Settings.KEYS.SUPPRESSION_FILE_BEARER_TOKEN, suppressionFileBearerToken);
+        getSettings().setBooleanIfNotNull(Settings.KEYS.UPDATE_VERSION_CHECK_ENABLED, versionCheckEnabled);
         getSettings().setStringIfNotEmpty(Settings.KEYS.HINTS_FILE, hintsFile);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_EXPERIMENTAL_ENABLED, enableExperimental);
         getSettings().setBooleanIfNotNull(Settings.KEYS.PRETTY_PRINT, prettyPrint);
@@ -2122,6 +1455,7 @@ public class Check extends Update {
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_SWIFT_PACKAGE_MANAGER_ENABLED, swiftPackageManagerAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_SWIFT_PACKAGE_RESOLVED_ENABLED, swiftPackageResolvedAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_COCOAPODS_ENABLED, cocoapodsAnalyzerEnabled);
+        getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_CARTHAGE_ENABLED, carthageAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_BUNDLE_AUDIT_ENABLED, bundleAuditAnalyzerEnabled);
         getSettings().setStringIfNotNull(Settings.KEYS.ANALYZER_BUNDLE_AUDIT_PATH, bundleAuditPath);
         getSettings().setStringIfNotNull(Settings.KEYS.ANALYZER_BUNDLE_AUDIT_WORKING_DIRECTORY, bundleAuditWorkingDirectory);
@@ -2131,6 +1465,7 @@ public class Check extends Update {
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_PIPFILE_ENABLED, pipfileAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_POETRY_ENABLED, poetryAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_COMPOSER_LOCK_ENABLED, composerAnalyzerEnabled);
+        getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_COMPOSER_LOCK_SKIP_DEV, composerAnalyzerSkipDev);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_CPANFILE_ENABLED, cpanfileAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_NODE_PACKAGE_ENABLED, nodeAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_NODE_PACKAGE_SKIPDEV, nodePackageSkipDevDependencies);
@@ -2139,11 +1474,6 @@ public class Check extends Update {
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_PNPM_AUDIT_ENABLED, pnpmAuditAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_NODE_AUDIT_USE_CACHE, nodeAuditAnalyzerUseCache);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_NODE_AUDIT_SKIPDEV, nodeAuditSkipDevDependencies);
-        getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_ENABLED, retireJsAnalyzerEnabled);
-        getSettings().setStringIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_REPO_JS_URL, retireJsUrl);
-        getSettings().setStringIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_REPO_JS_USER, retireJsUrlUser);
-        getSettings().setStringIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_REPO_JS_PASSWORD, retireJsUrlPassword);
-        getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_FORCEUPDATE, retireJsAnalyzerForceUpdate);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_FILTER_NON_VULNERABLE, retirejsFilterNonVulnerable);
         getSettings().setArrayIfNotEmpty(Settings.KEYS.ANALYZER_RETIREJS_FILTERS, retirejsFilters);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_GOLANG_DEP_ENABLED, golangDepEnabled);
@@ -2156,12 +1486,11 @@ public class Check extends Update {
         getSettings().setStringIfNotNull(Settings.KEYS.ANALYZER_MIX_AUDIT_PATH, mixAuditPath);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_NUSPEC_ENABLED, nuspecAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_NUGETCONF_ENABLED, nugetconfAnalyzerEnabled);
+        getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_LIBMAN_ENABLED, libmanAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_CENTRAL_ENABLED, centralAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_CENTRAL_USE_CACHE, centralAnalyzerUseCache);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_NEXUS_ENABLED, nexusAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_ARCHIVE_ENABLED, archiveAnalyzerEnabled);
-        getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_KNOWN_EXPLOITED_ENABLED, knownExploitedEnabled);
-        getSettings().setStringIfNotEmpty(Settings.KEYS.KEV_URL, knownExploitedUrl);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_ASSEMBLY_ENABLED, assemblyAnalyzerEnabled);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_MSBUILD_PROJECT_ENABLED, msbuildAnalyzerEnabled);
         getSettings().setStringIfNotEmpty(Settings.KEYS.ANALYZER_NEXUS_URL, nexusUrl);
@@ -2177,6 +1506,7 @@ public class Check extends Update {
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_OSSINDEX_USE_CACHE, ossindexAnalyzerUseCache);
         getSettings().setBooleanIfNotNull(Settings.KEYS.ANALYZER_OSSINDEX_WARN_ONLY_ON_REMOTE_ERRORS, ossIndexAnalyzerWarnOnlyOnRemoteErrors);
         getSettings().setFloat(Settings.KEYS.JUNIT_FAIL_ON_CVSS, junitFailOnCVSS);
+        getSettings().setBooleanIfNotNull(Settings.KEYS.FAIL_ON_UNUSED_SUPPRESSION_RULE, failBuildOnUnusedSuppressionRule);
     }
 
     /**
@@ -2194,15 +1524,20 @@ public class Check extends Update {
         for (Dependency d : dependencies) {
             boolean addName = true;
             for (Vulnerability v : d.getVulnerabilities()) {
-                if ((v.getCvssV2() != null && v.getCvssV2().getScore() >= failBuildOnCVSS)
-                        || (v.getCvssV3() != null && v.getCvssV3().getBaseScore() >= failBuildOnCVSS)
+                if ((v.getCvssV2() != null && v.getCvssV2().getCvssData().getBaseScore() >= failBuildOnCVSS)
+                        || (v.getCvssV3() != null && v.getCvssV3().getCvssData().getBaseScore() >= failBuildOnCVSS)
+                        || (v.getCvssV4() != null && v.getCvssV4().getCvssData().getBaseScore() >= failBuildOnCVSS)
                         || (v.getUnscoredSeverity() != null && SeverityUtil.estimateCvssV2(v.getUnscoredSeverity()) >= failBuildOnCVSS)
                         //safety net to fail on any if for some reason the above misses on 0
                         || (failBuildOnCVSS <= 0.0f)) {
                     if (addName) {
                         addName = false;
-                        ids.append(NEW_LINE).append(d.getFileName()).append(": ");
-                        ids.append(v.getName());
+                        ids.append(NEW_LINE).append(d.getFileName()).append(" (")
+                           .append(Stream.concat(d.getSoftwareIdentifiers().stream(), d.getVulnerableSoftwareIdentifiers().stream())
+                                         .map(Identifier::getValue)
+                                         .collect(Collectors.joining(", ")))
+                           .append("): ")
+                           .append(v.getName());
                     } else {
                         ids.append(", ").append(v.getName());
                     }

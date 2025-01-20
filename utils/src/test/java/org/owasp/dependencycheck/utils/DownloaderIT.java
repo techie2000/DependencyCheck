@@ -18,8 +18,15 @@
 package org.owasp.dependencycheck.utils;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+
+import org.apache.hc.client5.http.impl.classic.AbstractHttpClientResponseHandler;
+import org.apache.hc.core5.http.HttpEntity;
 import org.junit.Test;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 
@@ -36,7 +43,6 @@ public class DownloaderIT extends BaseTest {
     @Override
     public void setUp() {
         super.setUp();
-        applyHackFix();
     }
 
     /**
@@ -46,29 +52,35 @@ public class DownloaderIT extends BaseTest {
      */
     @Test
     public void testFetchFile() throws Exception {
-
-        URL url = new URL(getSettings().getString(Settings.KEYS.CVE_MODIFIED_JSON));
-        File outputPath = new File("target/downloaded_cve.xml");
-        Downloader downloader = new Downloader(getSettings());
-        downloader.fetchFile(url, outputPath);
+        final String str = getSettings().getString(Settings.KEYS.ENGINE_VERSION_CHECK_URL, "https://jeremylong.github.io/DependencyCheck/current.txt");
+        URL url = new URL(str);
+        File outputPath = new File("target/current.txt");
+        Downloader.getInstance().configure(getSettings());
+        Downloader.getInstance().fetchFile(url, outputPath);
         assertTrue(outputPath.isFile());
     }
 
     /**
-     * Upgrading to org.mock-server:mockserver-netty:5.8.0 caused this test case
-     * to fail as netty does not allow TLSv1.3 to be "used" in Java 1.8. Under
-     * 1.8 for some reason `https.protocols` includes TLSv1.3 even though it is
-     * not supported in most implementations. Thus, we need to explicitly remove
-     * it for this test case to work.
+     * Test of fetchAndHandleContent method.
+     *
+     * @throws Exception thrown when an exception occurs.
      */
-    private void applyHackFix() {
-        String httpProtocols = System.getProperty("https.protocols");
-        if (httpProtocols != null && httpProtocols.contains(",TLSv1.3")) {
-            httpProtocols = httpProtocols.replace(",TLSv1.3", "");
-            System.setProperty("https.protocols", httpProtocols);
-        } else if (httpProtocols != null && httpProtocols.contains("TLSv1.3,")) {
-            httpProtocols = httpProtocols.replace("TLSv1.3,", "");
-            System.setProperty("https.protocols", httpProtocols);
-        }
+    @Test
+    public void testfetchAndHandleContent() throws Exception {
+        URL url = new URL(getSettings().getString(Settings.KEYS.ENGINE_VERSION_CHECK_URL));
+        AbstractHttpClientResponseHandler<String> versionHandler = new AbstractHttpClientResponseHandler<String>() {
+            @Override
+            public String handleEntity(HttpEntity entity) throws IOException {
+                try (InputStream in = entity.getContent()) {
+                    byte[] read = new byte[90];
+                    in.read(read);
+                    String text = new String(read, UTF_8);
+                    assertTrue(text.matches("^\\d+\\.\\d+\\.\\d+.*"));
+                }
+                return "";
+            }
+        };
+        Downloader.getInstance().fetchAndHandle(url, versionHandler);
     }
+
 }
