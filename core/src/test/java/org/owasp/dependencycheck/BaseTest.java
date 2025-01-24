@@ -15,6 +15,7 @@
  */
 package org.owasp.dependencycheck;
 
+import io.github.jeremylong.jcs3.slf4j.Slf4jAdapter;
 import java.io.File;
 import java.io.InputStream;
 import java.net.URISyntaxException;
@@ -41,6 +42,8 @@ public abstract class BaseTest {
      */
     @Before
     public void setUp() throws Exception {
+        System.setProperty("jcs.logSystem", "slf4j");
+        Slf4jAdapter.muteLogging(true);
         settings = new Settings();
     }
 

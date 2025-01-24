@@ -18,13 +18,10 @@
 package org.owasp.dependencycheck.data.update;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import javax.annotation.concurrent.ThreadSafe;
-import org.apache.commons.io.IOUtils;
 import org.owasp.dependencycheck.Engine;
 import org.owasp.dependencycheck.data.nvdcve.CveDB;
 import org.owasp.dependencycheck.data.nvdcve.DatabaseException;
@@ -32,9 +29,10 @@ import org.owasp.dependencycheck.data.nvdcve.DatabaseProperties;
 import org.owasp.dependencycheck.data.update.exception.UpdateException;
 import org.owasp.dependencycheck.utils.DateUtil;
 import org.owasp.dependencycheck.utils.DependencyVersion;
+import org.owasp.dependencycheck.utils.Downloader;
+import org.owasp.dependencycheck.utils.ResourceNotFoundException;
 import org.owasp.dependencycheck.utils.Settings;
-import org.owasp.dependencycheck.utils.URLConnectionFactory;
-import org.owasp.dependencycheck.utils.URLConnectionFailureException;
+import org.owasp.dependencycheck.utils.TooManyRequestsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,14 +121,14 @@ public class EngineVersionCheck implements CachedWebDataSource {
             final CveDB db = engine.getDatabase();
             final boolean autoupdate = settings.getBoolean(Settings.KEYS.AUTO_UPDATE, true);
             final boolean enabled = settings.getBoolean(Settings.KEYS.UPDATE_VERSION_CHECK_ENABLED, true);
-            final String original = settings.getString(Settings.KEYS.CVE_ORIGINAL_JSON);
-            final String current = settings.getString(Settings.KEYS.CVE_MODIFIED_JSON);
+            final String datafeed = settings.getString(Settings.KEYS.NVD_API_DATAFEED_URL);
             /*
              * Only update if auto-update is enabled, the engine check is
-             * enabled, and the NVD CVE URLs have not been modified (i.e. the
-             * user has not configured them to point to an internal source).
+             * enabled, and the NVD DataFeed is being used (i.e. the user
+             * is likely on a private network). This check is not really needed
+             * so we are okay skipping it.
              */
-            if (enabled && autoupdate && original != null && original.equals(current)) {
+            if (enabled && autoupdate && datafeed != null) {
                 LOGGER.debug("Begin Engine Version Check");
 
                 final DatabaseProperties properties = db.getDatabaseProperties();
@@ -208,30 +206,20 @@ public class EngineVersionCheck implements CachedWebDataSource {
      * @return the current released version number
      */
     protected String getCurrentReleaseVersion() {
-        HttpURLConnection conn = null;
         try {
             final String str = settings.getString(Settings.KEYS.ENGINE_VERSION_CHECK_URL, "https://jeremylong.github.io/DependencyCheck/current.txt");
             final URL url = new URL(str);
-            final URLConnectionFactory factory = new URLConnectionFactory(settings);
-            conn = factory.createHttpURLConnection(url);
-            conn.connect();
-            if (conn.getResponseCode() != 200) {
-                return null;
-            }
-            try (InputStream is = conn.getInputStream()) {
-                final String releaseVersion = new String(IOUtils.toByteArray(is), StandardCharsets.UTF_8);
-                return releaseVersion.trim();
-            }
+            String releaseVersion = null;
+            releaseVersion = Downloader.getInstance().fetchContent(url, StandardCharsets.UTF_8);
+            return releaseVersion.trim();
+        } catch (TooManyRequestsException ex) {
+            LOGGER.debug("Unable to retrieve current release version of dependency-check - downloader failed on HTTP 429 Too many requests");
+        } catch (ResourceNotFoundException ex) {
+            LOGGER.debug("Unable to retrieve current release version of dependency-check - downloader  failed on HTTP 404 ResourceNotFound");
         } catch (MalformedURLException ex) {
             LOGGER.debug("Unable to retrieve current release version of dependency-check - malformed url?");
-        } catch (URLConnectionFailureException ex) {
-            LOGGER.debug("Unable to retrieve current release version of dependency-check - connection failed");
         } catch (IOException ex) {
             LOGGER.debug("Unable to retrieve current release version of dependency-check - i/o exception");
-        } finally {
-            if (conn != null) {
-                conn.disconnect();
-            }
         }
         return null;
     }

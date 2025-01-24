@@ -24,11 +24,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
-import javax.json.Json;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
-import javax.json.JsonString;
-import javax.json.JsonValue;
+import jakarta.json.Json;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonObjectBuilder;
+import jakarta.json.JsonString;
+import jakarta.json.JsonValue;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.collections4.MultiValuedMap;
 
@@ -40,6 +40,7 @@ import org.apache.commons.collections4.MultiValuedMap;
  */
 @ThreadSafe
 public final class NpmPayloadBuilder {
+
     /**
      * Private constructor for utility class.
      */
@@ -108,13 +109,23 @@ public final class NpmPayloadBuilder {
         }
 
         if (dependencies != null) {
-            dependencies.forEach((key, value) -> {
+            dependencies.forEach((k, value) -> {
+                String key = k;
                 final int indexOfNodeModule = key.lastIndexOf(NodePackageAnalyzer.NODE_MODULES_DIRNAME + "/");
                 if (indexOfNodeModule >= 0) {
                     key = key.substring(indexOfNodeModule + NodePackageAnalyzer.NODE_MODULES_DIRNAME.length() + 1);
                 }
 
-                final JsonObject dep = ((JsonObject) value);
+                JsonObject dep = ((JsonObject) value);
+
+                //After Version 3, dependencies can't be taken directly from package-lock.json
+                if (lockJsonVersion > 2 && dep.containsKey("dependencies") && dep.get("dependencies") instanceof JsonObject) {
+                    final JsonObjectBuilder depBuilder = Json.createObjectBuilder(dep);
+                    depBuilder.remove("dependencies");
+                    depBuilder.add("requires", dep.get("dependencies"));
+                    dep = depBuilder.build();
+                }
+
                 final String version = dep.getString("version", "");
                 final boolean isDev = dep.getBoolean("dev", false);
                 if (skipDevDependencies && isDev) {
@@ -144,7 +155,7 @@ public final class NpmPayloadBuilder {
      * @return the JSON payload for NPN Audit
      */
     public static JsonObject build(JsonObject packageJson, MultiValuedMap<String, String> dependencyMap,
-                                   final boolean skipDevDependencies) {
+            final boolean skipDevDependencies) {
         final JsonObjectBuilder payloadBuilder = Json.createObjectBuilder();
         addProjectInfo(packageJson, payloadBuilder);
 
@@ -236,15 +247,23 @@ public final class NpmPayloadBuilder {
     private static JsonObject buildDependencies(JsonObject dep, MultiValuedMap<String, String> dependencyMap) {
         final JsonObjectBuilder depBuilder = Json.createObjectBuilder();
         Optional.ofNullable(dep.getJsonString("version"))
-                        .map(JsonString::getString)
-                        .ifPresent(version -> depBuilder.add("version", version));
+                .map(JsonString::getString)
+                .ifPresent(version -> depBuilder.add("version", version));
 
         //not installed package (like, dependency of an optional dependency) doesn't contains integrity
         if (dep.containsKey("integrity")) {
             depBuilder.add("integrity", dep.getString("integrity"));
         }
         if (dep.containsKey("requires")) {
-            depBuilder.add("requires", dep.getJsonObject("requires"));
+            final JsonObjectBuilder requiresBuilder = Json.createObjectBuilder();
+            dep.getJsonObject("requires").forEach((key, value) -> {
+                if (NodePackageAnalyzer.shouldSkipDependency(key, ((JsonString) value).getString())) {
+                    return;
+                }
+
+                requiresBuilder.add(key, value);
+            });
+            depBuilder.add("requires", requiresBuilder.build());
         }
         if (dep.containsKey("dependencies")) {
             final JsonObjectBuilder dependeciesBuilder = Json.createObjectBuilder();

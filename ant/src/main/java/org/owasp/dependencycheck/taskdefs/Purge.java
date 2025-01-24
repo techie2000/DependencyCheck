@@ -17,21 +17,18 @@
  */
 package org.owasp.dependencycheck.taskdefs;
 
+import io.github.jeremylong.jcs3.slf4j.Slf4jAdapter;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
-import org.apache.commons.jcs.JCS;
-import org.apache.commons.jcs.access.CacheAccess;
-import org.apache.commons.jcs.engine.CompositeCacheAttributes;
-import org.apache.commons.jcs.engine.behavior.ICompositeCacheAttributes;
 import org.apache.tools.ant.BuildException;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.Task;
 import org.owasp.dependencycheck.Engine;
-import org.owasp.dependencycheck.data.cache.DataCache;
+import org.owasp.dependencycheck.utils.Downloader;
+import org.owasp.dependencycheck.utils.InvalidSettingException;
 import org.owasp.dependencycheck.utils.Settings;
-import org.owasp.dependencycheck.xml.pom.Model;
 import org.slf4j.impl.StaticLoggerBinder;
 
 /**
@@ -61,11 +58,6 @@ public class Purge extends Task {
     private boolean failOnError = true;
 
     /**
-     * The URL to hosted suppressions file with base FP suppressions.
-     */
-    private String hostedSuppressionsUrl = null;
-
-    /**
      * Construct a new DependencyCheckTask.
      */
     public Purge() {
@@ -78,15 +70,6 @@ public class Purge extends Task {
 
     public Settings getSettings() {
         return settings;
-    }
-
-    /**
-     * Get the value of dataDirectory.
-     *
-     * @return the value of dataDirectory
-     */
-    public String getDataDirectory() {
-        return dataDirectory;
     }
 
     /**
@@ -117,40 +100,42 @@ public class Purge extends Task {
     }
 
     /**
-     * Get the value of hostedSuppressionsUrl.
+     * Sets the
+     * {@link Thread#getContextClassLoader() Thread Context Class Loader} to the
+     * one for this class, and then calls
+     * {@link #executeWithContextClassloader()}. This is done because the JCS
+     * cache needs to have the Thread Context Class Loader set to something that
+     * can resolve it's classes. Other build tools do this by default but Ant
+     * does not.
      *
-     * @return the value of hostedSuppressionsUrl
-     */
-    public String getHostedSuppressionsUrl() {
-        return hostedSuppressionsUrl;
-    }
-
-    /**
-     * Set the value of hostedSuppressionsUrl.
-     *
-     * @param hostedSuppressionsUrl new value of hostedSuppressionsUrl
-     */
-    public void setHostedSuppressionsUrl(final String hostedSuppressionsUrl) {
-        this.hostedSuppressionsUrl = hostedSuppressionsUrl;
-    }
-
-    /**
-     * Sets the {@link Thread#getContextClassLoader() Thread Context Class Loader} to the one for this class,
-     * and then calls {@link #executeWithContextClassloader()}. This is done because the JCS cache needs to have
-     * the Thread Context Class Loader set to something that can resolve it's classes. Other build tools do this
-     * by default but Ant does not.
-     *
-     * @throws BuildException throws if there is a problem. See {@link #executeWithContextClassloader()} for details
+     * @throws BuildException throws if there is a problem. See
+     * {@link #executeWithContextClassloader()} for details
      */
     @Override
     public final void execute() throws BuildException {
-        ClassLoader current = Thread.currentThread().getContextClassLoader();
+        muteNoisyLoggers();
+        final ClassLoader current = Thread.currentThread().getContextClassLoader();
         try {
             Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
 
             executeWithContextClassloader();
         } finally {
             Thread.currentThread().setContextClassLoader(current);
+        }
+    }
+
+    /**
+     * Hacky method of muting the noisy logging from JCS.
+     */
+    private void muteNoisyLoggers() {
+        System.setProperty("jcs.logSystem", "slf4j");
+        Slf4jAdapter.muteLogging(true);
+
+        final String[] noisyLoggers = {
+            "org.apache.hc"
+        };
+        for (String loggerName : noisyLoggers) {
+            System.setProperty("org.slf4j.simpleLogger.log." + loggerName, "error");
         }
     }
 
@@ -164,6 +149,11 @@ public class Purge extends Task {
     @SuppressWarnings("squid:RedundantThrowsDeclarationCheck")
     protected void executeWithContextClassloader() throws BuildException {
         populateSettings();
+        try {
+            Downloader.getInstance().configure(settings);
+        } catch (InvalidSettingException e) {
+            throw new BuildException(e);
+        }
         try (Engine engine = new Engine(Engine.Mode.EVIDENCE_PROCESSING, getSettings())) {
             engine.purge();
         } finally {
@@ -191,7 +181,6 @@ public class Purge extends Task {
             }
             log(msg, ex, Project.MSG_WARN);
         }
-        settings.setStringIfNotEmpty(Settings.KEYS.HOSTED_SUPPRESSIONS_URL, hostedSuppressionsUrl);
         if (dataDirectory != null) {
             settings.setString(Settings.KEYS.DATA_DIRECTORY, dataDirectory);
         } else {

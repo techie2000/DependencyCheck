@@ -20,7 +20,7 @@ Copyright (c) 2013 - Jeremy Long. All Rights Reserved.
     <parent>
         <groupId>org.owasp</groupId>
         <artifactId>dependency-check-parent</artifactId>
-        <version>8.2.2-SNAPSHOT</version>
+        <version>12.0.2-SNAPSHOT</version>
     </parent>
 
     <artifactId>dependency-check-ant</artifactId>
@@ -84,25 +84,6 @@ Copyright (c) 2013 - Jeremy Long. All Rights Reserved.
                                     <filtering>false</filtering>
                                     <includes>
                                         <include>data.zip</include>
-                                    </includes>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>copy-test-upgrade-script</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/test-classes/data</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>${basedir}/../core/src/test/resources/data</directory>
-                                    <filtering>false</filtering>
-                                    <includes>
-                                        <include>upgrade_4.2.sql</include>
                                     </includes>
                                 </resource>
                             </resources>
@@ -184,26 +165,6 @@ Copyright (c) 2013 - Jeremy Long. All Rights Reserved.
                             </resources>
                         </configuration>
                     </execution>
-                    <execution>
-                        <id>copy-data</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/test-classes</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>${basedir}/../src/test/resources</directory>
-                                    <filtering>false</filtering>
-                                    <includes>
-                                        <include>db.cve.zip</include>
-                                        <include>index.cpe.zip</include>
-                                    </includes>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -251,6 +212,19 @@ Copyright (c) 2013 - Jeremy Long. All Rights Reserved.
             <groupId>org.owasp</groupId>
             <artifactId>dependency-check-utils</artifactId>
             <version>${project.parent.version}</version>
+        </dependency>
+        <dependency>
+            <!-- not visible in imports due to method chaining, but Check code uses classes from this library -->
+            <groupId>io.github.jeremylong</groupId>
+            <artifactId>open-vulnerability-clients</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.jeremylong</groupId>
+            <artifactId>jcs3-slf4j</artifactId>
         </dependency>
         <dependency>
             <groupId>org.owasp</groupId>

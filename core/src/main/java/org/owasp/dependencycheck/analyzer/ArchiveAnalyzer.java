@@ -17,6 +17,33 @@
  */
 package org.owasp.dependencycheck.analyzer;
 
+import org.apache.commons.compress.archivers.ArchiveEntry;
+import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.apache.commons.compress.compressors.CompressorInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2Utils;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipUtils;
+import org.apache.commons.io.IOUtils;
+import org.eclipse.packager.rpm.RpmTag;
+import org.eclipse.packager.rpm.parse.RpmInputStream;
+import org.owasp.dependencycheck.Engine;
+import org.owasp.dependencycheck.analyzer.exception.AnalysisException;
+import org.owasp.dependencycheck.analyzer.exception.ArchiveExtractionException;
+import org.owasp.dependencycheck.analyzer.exception.UnexpectedAnalysisException;
+import org.owasp.dependencycheck.dependency.Dependency;
+import org.owasp.dependencycheck.exception.InitializationException;
+import org.owasp.dependencycheck.utils.FileFilterBuilder;
+import org.owasp.dependencycheck.utils.FileUtils;
+import org.owasp.dependencycheck.utils.Settings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileFilter;
@@ -24,6 +51,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -33,36 +61,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import javax.annotation.concurrent.ThreadSafe;
 
-import org.apache.commons.compress.archivers.ArchiveEntry;
-import org.apache.commons.compress.archivers.ArchiveInputStream;
-import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream;
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
-import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
-import org.apache.commons.compress.archivers.zip.ZipFile;
-import org.apache.commons.compress.compressors.CompressorInputStream;
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
-import org.apache.commons.compress.compressors.bzip2.BZip2Utils;
-import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
-import org.apache.commons.compress.compressors.gzip.GzipUtils;
-import org.apache.commons.compress.utils.IOUtils;
-import org.eclipse.packager.rpm.RpmTag;
-import org.eclipse.packager.rpm.parse.RpmInputStream;
-import org.owasp.dependencycheck.Engine;
 import static org.owasp.dependencycheck.analyzer.AbstractNpmAnalyzer.shouldProcess;
-import org.owasp.dependencycheck.analyzer.exception.AnalysisException;
-import org.owasp.dependencycheck.analyzer.exception.ArchiveExtractionException;
-import org.owasp.dependencycheck.analyzer.exception.UnexpectedAnalysisException;
-import org.owasp.dependencycheck.dependency.Dependency;
-import org.owasp.dependencycheck.exception.InitializationException;
-import org.owasp.dependencycheck.utils.FileFilterBuilder;
-import org.owasp.dependencycheck.utils.FileUtils;
-import org.owasp.dependencycheck.utils.Settings;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * <p>
@@ -360,7 +360,7 @@ public class ArchiveAnalyzer extends AbstractFileTypeAnalyzer {
                 dependency.setMd5sum("");
                 dependency.setSha1sum("");
                 dependency.setSha256sum("");
-                org.apache.commons.io.FileUtils.copyFile(dependency.getActualFile(), tmpLoc);
+                Files.copy(dependency.getActualFile().toPath(), tmpLoc.toPath());
                 final List<Dependency> dependencySet = findMoreDependencies(engine, tmpLoc);
                 if (dependencySet != null && !dependencySet.isEmpty()) {
                     dependencySet.forEach((d) -> {
@@ -460,7 +460,7 @@ public class ArchiveAnalyzer extends AbstractFileTypeAnalyzer {
                     tin = new TarArchiveInputStream(in);
                     extractArchive(tin, destination, engine);
                 } else if ("gz".equals(archiveExt) || "tgz".equals(archiveExt)) {
-                    final String uncompressedName = GzipUtils.getUncompressedFilename(archive.getName());
+                    final String uncompressedName = GzipUtils.getUncompressedFileName(archive.getName());
                     final File f = new File(destination, uncompressedName);
                     if (engine.accept(f)) {
                         final String destPath = destination.getCanonicalPath();
@@ -475,7 +475,7 @@ public class ArchiveAnalyzer extends AbstractFileTypeAnalyzer {
                         decompressFile(gin, f);
                     }
                 } else if ("bz2".equals(archiveExt) || "tbz2".equals(archiveExt)) {
-                    final String uncompressedName = BZip2Utils.getUncompressedFilename(archive.getName());
+                    final String uncompressedName = BZip2Utils.getUncompressedFileName(archive.getName());
                     final File f = new File(destination, uncompressedName);
                     if (engine.accept(f)) {
                         final String destPath = destination.getCanonicalPath();
@@ -524,12 +524,11 @@ public class ArchiveAnalyzer extends AbstractFileTypeAnalyzer {
      * executable JAR is identified the input stream will be advanced to the
      * start of the actual JAR file ( skipping the script).
      *
-     * @see
-     * <a href="http://docs.spring.io/spring-boot/docs/1.3.0.BUILD-SNAPSHOT/reference/htmlsingle/#deployment-install">Installing
-     * Spring Boot Applications</a>
      * @param archiveExt the file extension
      * @param in the input stream
      * @throws IOException thrown if there is an error reading the stream
+     * @see <a href="http://docs.spring.io/spring-boot/docs/1.3.0.BUILD-SNAPSHOT/reference/htmlsingle/#deployment-install">Installing
+     * Spring Boot Applications</a>
      */
     private void ensureReadableJar(final String archiveExt, BufferedInputStream in) throws IOException {
         if (("war".equals(archiveExt) || "jar".equals(archiveExt)) && in.markSupported()) {
@@ -729,7 +728,7 @@ public class ArchiveAnalyzer extends AbstractFileTypeAnalyzer {
         boolean isJar = false;
         ZipFile zip = null;
         try {
-            zip = new ZipFile(dependency.getActualFilePath());
+            zip = ZipFile.builder().setFile(dependency.getActualFilePath()).get();
             if (zip.getEntry("META-INF/MANIFEST.MF") != null
                     || zip.getEntry("META-INF/maven") != null) {
                 final Enumeration<ZipArchiveEntry> entries = zip.getEntries();

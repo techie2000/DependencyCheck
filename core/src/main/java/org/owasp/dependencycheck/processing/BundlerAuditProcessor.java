@@ -20,27 +20,12 @@ package org.owasp.dependencycheck.processing;
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
 import com.github.packageurl.PackageURLBuilder;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.commons.io.FileUtils;
+import io.github.jeremylong.openvulnerability.client.nvd.CvssV2;
+import io.github.jeremylong.openvulnerability.client.nvd.CvssV2Data;
 import org.owasp.dependencycheck.Engine;
-import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.ADVISORY;
-import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.CRITICALITY;
-import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.CVE;
-import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.DEPENDENCY_ECOSYSTEM;
-import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.NAME;
-import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.VERSION;
 import org.owasp.dependencycheck.data.nvdcve.CveDB;
 import org.owasp.dependencycheck.data.nvdcve.DatabaseException;
 import org.owasp.dependencycheck.dependency.Confidence;
-import org.owasp.dependencycheck.dependency.CvssV2;
 import org.owasp.dependencycheck.dependency.Dependency;
 import org.owasp.dependencycheck.dependency.EvidenceType;
 import org.owasp.dependencycheck.dependency.Reference;
@@ -55,6 +40,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import us.springett.parsers.cpe.exceptions.CpeValidationException;
 import us.springett.parsers.cpe.values.Part;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.ADVISORY;
+import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.CRITICALITY;
+import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.CVE;
+import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.DEPENDENCY_ECOSYSTEM;
+import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.NAME;
+import static org.owasp.dependencycheck.analyzer.RubyBundleAuditAnalyzer.VERSION;
 
 /**
  * Processor for the output of bundler-audit.
@@ -124,8 +125,7 @@ public class BundlerAuditProcessor extends Processor<InputStream> {
         final Map<String, Dependency> map = new HashMap<>();
         boolean appendToDescription = false;
 
-        try (InputStreamReader ir = new InputStreamReader(getInput(), StandardCharsets.UTF_8);
-                BufferedReader br = new BufferedReader(ir)) {
+        try (InputStreamReader ir = new InputStreamReader(getInput(), StandardCharsets.UTF_8); BufferedReader br = new BufferedReader(ir)) {
 
             String nextLine;
             while ((nextLine = br.readLine()) != null) {
@@ -133,7 +133,7 @@ public class BundlerAuditProcessor extends Processor<InputStream> {
                     appendToDescription = false;
                     gem = nextLine.substring(NAME.length());
                     if (!map.containsKey(gem)) {
-                        map.put(gem, createDependencyForGem(engine, parentName, fileName, filePath, gem));
+                        map.put(gem, createDependencyForGem(engine, gemDependency.getActualFile(), parentName, fileName, filePath, gem));
                     }
                     dependency = map.get(gem);
                     LOGGER.debug("bundle-audit ({}): {}", parentName, nextLine);
@@ -216,7 +216,7 @@ public class BundlerAuditProcessor extends Processor<InputStream> {
     private void addCriticalityToVulnerability(String parentName, Vulnerability vulnerability, String nextLine) {
         if (null != vulnerability) {
             final String criticality = nextLine.substring(CRITICALITY.length()).trim();
-            float score = -1.0f;
+            Double score = -1.0;
             Vulnerability v = null;
             final CveDB cvedb = engine.getDatabase();
             if (cvedb != null) {
@@ -235,13 +235,18 @@ public class BundlerAuditProcessor extends Processor<InputStream> {
                 }
             } else {
                 if ("High".equalsIgnoreCase(criticality)) {
-                    score = 8.5f;
+                    score = 8.5;
                 } else if ("Medium".equalsIgnoreCase(criticality)) {
-                    score = 5.5f;
+                    score = 5.5;
                 } else if ("Low".equalsIgnoreCase(criticality)) {
-                    score = 2.0f;
+                    score = 2.0;
                 }
-                vulnerability.setCvssV2(new CvssV2(score, "-", "-", "-", "-", "-", "-", criticality));
+                LOGGER.debug("bundle-audit vulnerability missing CVSS data: {}", vulnerability.getName());
+                final CvssV2Data cvssData = new CvssV2Data("2.0", null, null, null, null, null, null, null, score, criticality.toUpperCase(),
+                        null, null, null, null, null, null, null, null, null, null);
+                final CvssV2 cvssV2 = new CvssV2(null, null, cvssData, criticality.toUpperCase(), null, null, null, null, null, null, null);
+                vulnerability.setCvssV2(cvssV2);
+                vulnerability.setUnscoredSeverity(null);
             }
         }
         LOGGER.debug("bundle-audit ({}): {}", parentName, nextLine);
@@ -289,7 +294,7 @@ public class BundlerAuditProcessor extends Processor<InputStream> {
                     .version(version).build();
             vulnerability.addVulnerableSoftware(vs);
             vulnerability.setMatchedVulnerableSoftware(vs);
-            vulnerability.setCvssV2(new CvssV2(-1, "-", "-", "-", "-", "-", "-", "unknown"));
+            vulnerability.setUnscoredSeverity("UNKNOWN");
         }
         LOGGER.debug("bundle-audit ({}): {}", parentName, nextLine);
         return vulnerability;
@@ -299,6 +304,7 @@ public class BundlerAuditProcessor extends Processor<InputStream> {
      * Creates the dependency based off of the gem.
      *
      * @param engine the engine used for scanning
+     * @param gemFile the gem file
      * @param parentName the gem parent
      * @param fileName the file name
      * @param filePath the file path
@@ -306,19 +312,14 @@ public class BundlerAuditProcessor extends Processor<InputStream> {
      * @return the dependency to add
      * @throws IOException thrown if a temporary gem file could not be written
      */
-    private Dependency createDependencyForGem(Engine engine, String parentName, String fileName, String filePath, String gem) throws IOException {
-        final File gemFile;
-        try {
-            gemFile = File.createTempFile(gem, "_Gemfile.lock", engine.getSettings().getTempDirectory());
-        } catch (IOException ioe) {
-            throw new IOException("Unable to create temporary gem file");
-        }
+    private Dependency createDependencyForGem(Engine engine, File gemFile, String parentName, String fileName,
+            String filePath, String gem) throws IOException {
         final String displayFileName = String.format("%s%c%s:%s", parentName, File.separatorChar, fileName, gem);
-
-        FileUtils.write(gemFile, displayFileName, Charset.defaultCharset()); // unique contents to avoid dependency bundling
-        final Dependency dependency = new Dependency(gemFile);
+        final Dependency dependency = new Dependency(gemFile, true);
+        dependency.setSha1sum(Checksum.getSHA1Checksum(displayFileName));
         dependency.setEcosystem(DEPENDENCY_ECOSYSTEM);
         dependency.addEvidence(EvidenceType.PRODUCT, "bundler-audit", "Name", gem, Confidence.HIGHEST);
+        dependency.addEvidence(EvidenceType.VENDOR, "bundler-audit", "Name", gem, Confidence.HIGH);
         //TODO add package URL - note, this may require parsing the gemfile.lock and getting the version for each entry
 
         dependency.setDisplayFileName(displayFileName);

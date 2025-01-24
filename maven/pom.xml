@@ -20,7 +20,7 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
     <parent>
         <groupId>org.owasp</groupId>
         <artifactId>dependency-check-parent</artifactId>
-        <version>8.2.2-SNAPSHOT</version>
+        <version>12.0.2-SNAPSHOT</version>
     </parent>
     <artifactId>dependency-check-maven</artifactId>
     <packaging>maven-plugin</packaging>
@@ -28,8 +28,7 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
     <description>dependency-check-maven is a Maven Plugin that uses dependency-check-core to detect publicly disclosed vulnerabilities associated with the project's dependencies. The plugin will generate a report listing the dependency, any identified Common Platform Enumeration (CPE) identifiers, and the associated Common Vulnerability and Exposure (CVE) entries.</description>
     <inceptionYear>2013</inceptionYear>
     <properties>
-        <!-- upgrading has caused publishing errors -->
-        <version.maven-plugin-plugin>3.8.1</version.maven-plugin-plugin>
+        <version.maven-plugin-plugin>3.15.1</version.maven-plugin-plugin>
     </properties>
     <scm>
         <connection>scm:git:https://github.com/jeremylong/DependencyCheck.git</connection>
@@ -38,7 +37,7 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
         <tag>v6.4.1</tag>
     </scm>
     <prerequisites>
-        <maven>3.1.0</maven>
+        <maven>3.6.3</maven>
     </prerequisites>
     <build>
         <resources>
@@ -88,14 +87,22 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-plugin-plugin</artifactId>
+                <artifactId>maven-plugin-report-plugin</artifactId>
                 <version>${version.maven-plugin-plugin}</version>
-                <configuration>
-                    <goalPrefix>dependency-check</goalPrefix>
-                </configuration>
             </plugin>
         </plugins>
     </reporting>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.maven</groupId>
+                <artifactId>maven-resolver-provider</artifactId>
+                <version>${maven.api.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>org.owasp</groupId>
@@ -106,6 +113,15 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
             <groupId>org.owasp</groupId>
             <artifactId>dependency-check-utils</artifactId>
             <version>${project.parent.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.jeremylong</groupId>
+            <artifactId>jcs3-slf4j</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
@@ -123,12 +139,20 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>org.apache.maven.doxia</groupId>
+            <artifactId>doxia-sink-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.apache.maven.shared</groupId>
             <artifactId>file-management</artifactId>
         </dependency>
         <dependency><!--upgrade transitive dependency due to reported vulns-->
             <groupId>org.codehaus.plexus</groupId>
             <artifactId>plexus-utils</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.codehaus.plexus</groupId>
+            <artifactId>plexus-xml</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.plugin-tools</groupId>
@@ -140,8 +164,8 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
             <artifactId>maven-reporting-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.sonatype.plexus</groupId>
-            <artifactId>plexus-sec-dispatcher</artifactId>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-settings-builder</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.shared</groupId>
@@ -165,6 +189,27 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-artifact</artifactId>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven.resolver</groupId>
+            <artifactId>maven-resolver-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven.shared</groupId>
+            <artifactId>maven-common-artifact-filters</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.jeremylong</groupId>
+            <artifactId>open-vulnerability-clients</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.package-url</groupId>
+            <artifactId>packageurl-java</artifactId>
         </dependency>
     </dependencies>
     <profiles>
@@ -199,6 +244,13 @@ Copyright (c) 2013 Jeremy Long. All Rights Reserved.
                                 </goals>
                             </execution>
                         </executions>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.apache.commons</groupId>
+                                <artifactId>commons-lang3</artifactId>
+                                <version>${commons-lang3.version}</version>
+                            </dependency>
+                        </dependencies>
                     </plugin>
                 </plugins>
             </build>

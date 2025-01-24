@@ -17,19 +17,20 @@ jobs:
       contains(github.event.comment.body,'approved') &&
       (github.event.comment.user.login == 'jeremylong' ||
       github.event.comment.user.login == 'aikebah' || 
-      github.event.comment.user.login == 'nhumblot')  }}
+      github.event.comment.user.login == 'nhumblot' ||
+      github.event.comment.user.login == 'chadlwilson') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: generatedSuppressions
-      - uses: actions/setup-node@v3.6.0
+      - uses: actions/setup-node@v4.1.0
       - run: |
           npm install fast-xml-parser@4.0.9
           npm install fs
       - name: Commit Suppression Rule
         id: fp-ops-commit
-        uses: actions/github-script@v6.4.0
+        uses: actions/github-script@v7.0.1
         with:
           script: |
             const { execSync } = require("child_process");
@@ -150,14 +151,14 @@ jobs:
             } 
       - name: Publish Updated Suppressions
         if: ${{ steps.fp-ops-commit.outputs.publish == 'true' }}
-        uses: JamesIves/github-pages-deploy-action@v4.4.1
+        uses: JamesIves/github-pages-deploy-action@v4.7.2
         with:
           branch: gh-pages
           folder: suppressions
           target-folder: suppressions
       - name: Message failure
         if: ${{ failure() || steps.fp-ops-commit.outputs.failed }}
-        uses: actions/github-script@v6.4.0
+        uses: actions/github-script@v7.0.1
         with:
           script: |
             github.rest.issues.createComment({

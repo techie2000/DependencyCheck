@@ -24,15 +24,17 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.UUID;
-
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import java.util.stream.Stream;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
-
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,8 +91,10 @@ public final class FileUtils {
             return false;
         }
 
-        try {
-            org.apache.commons.io.FileUtils.forceDelete(file);
+        try (Stream<Path> paths = Files.walk(file.toPath())) {
+            paths.sorted(Comparator.reverseOrder())
+            .map(Path::toFile)
+            .forEach(File::delete);
         } catch (IOException ex) {
             LOGGER.trace(ex.getMessage(), ex);
             LOGGER.debug("Failed to delete file: {} (error message: {}); attempting to delete on exit.", file.getPath(), ex.getMessage());

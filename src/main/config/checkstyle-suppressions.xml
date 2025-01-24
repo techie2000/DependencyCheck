@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 
 <!DOCTYPE suppressions PUBLIC
-     "-//Puppy Crawl//DTD Suppressions 1.0//EN"
-     "http://www.puppycrawl.com/dtds/suppressions_1_0.dtd">
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
 
 <suppressions>
     <suppress checks=".*" files=".*[\\/]package-info\.java" />
@@ -19,6 +19,7 @@
     <suppress checks="RegexpHeader" files=".*[\\/]org[\\/]owasp[\\/]dependencycheck[\\/]utils[\\/]SSLSocketFactoryEx.java" />
     <suppress checks="RegexpHeader" files=".*[\\/]org[\\/]owasp[\\/]dependencycheck[\\/]xml[\\/]XmlInputStream.java" />
     <suppress checks="RegexpHeader" files=".*[\\/]org[\\/]owasp[\\/]dependencycheck[\\/]xml[\\/]XmlEntity.java" />
+    <suppress checks="FileLength" files=".*Check.java" />
     <suppress checks="FileLength" files=".*BaseDependencyCheckMojo.java" />
     <suppress checks="LineLength" files=".*BaseDependencyCheckMojo.java" />
 </suppressions>

@@ -8,18 +8,73 @@ Dependency-Check is a Software Composition Analysis (SCA) tool that attempts to 
 
 Documentation and links to production binary releases can be found on the [github pages](http://jeremylong.github.io/DependencyCheck/). Additionally, more information about the architecture and ways to extend dependency-check can be found on the [wiki].
 
-## 8.0.0 Upgrade Notice
+## Notice
 
-8.0.0 contains breaking changes which requires updates to the database. If using
-an externally hosted database the schema will need to be updated. When using the
-embedded H2 database the schema should be upgraded automatically. However, if
-issues arise you may need to purge the database:
+This product uses the NVD API but is not endorsed or certified by the NVD.
 
-- gradle: `./gradlew dependencyCheckPurge`
-- maven: `mvn org.owasp:dependency-check-maven:8.0.0:purge`
-- cli: `dependency-check.sh --purge`
+
+## Breaking Changes in 11.0.0
+
+- Java 11 is now required to run dependency-check 11.0.0 or higher
+- H2 database upgrade
+
+    11.0.0 contains breaking changes using the local H2 database. A full download
+    of the NVD data will occur. Note that if you are using a shared data directory
+    the h2 database file is not compatible with older versions of dependency-check.
+    If you run into problems you may need to run a purge:
+
+    - gradle: `./gradlew dependencyCheckPurge`
+    - maven: `mvn org.owasp:dependency-check-maven:9.0.0:purge`
+    - cli: `dependency-check.sh --purge`
+
+## Mandatory Upgrade Notice
+
+**Upgrading to 10.0.2 or later is mandatory**
+
+Older versions of dependency-check are causing numerous, duplicative requests that
+end in processing failures are causing unnecassary load on the NVD API. Dependency-check
+10.0.2 uses an updated `User-Agent` header that will allow the NVD to block calls
+from the older client.
+
+### NVD API Key Highly Recommended
+
+Dependency-check has moved from using the NVD data-feed to the NVD API.
+Users of dependency-check are **highly** encouraged to obtain an NVD API Key; see https://nvd.nist.gov/developers/request-an-api-key
+Without an NVD API Key dependency-check's updates will be **extremely slow**.
+Please see the documentation for the cli, maven, gradle, or ant integrations on
+how to set the NVD API key.
+
+#### The NVD API Key, CI, and Rate Limiting
+
+The NVD API has enforced rate limits. If you are using a single API KEY and
+multiple builds occur you could hit the rate limit and receive 403 errors. In
+a CI environment one must use a caching strategy.
+
+#### Gradle build Environment
+
+With 9.0.0 users may encounter issues with `NoSuchMethodError` exceptions due to
+dependency resolution. If you encounter this issue you will need to pin some of
+the transitive dependencies of dependency-check to specific versions. For example:
+
+/buildSrc/build.gradle
+```groovy
+dependencies {
+    constraints {
+        // org.owasp.dependencycheck needs at least this version of jackson. Other plugins pull in older versions..
+        add("implementation", "com.fasterxml.jackson:jackson-bom:2.16.1")
+
+        // org.owasp.dependencycheck needs these versions. Other plugins pull in older versions..
+        add("implementation", "org.apache.commons:commons-lang3:3.14.0")
+        add("implementation", "org.apache.commons:commons-text:1.11.0")
+    }
+}
+```
 
 ## Requirements
+
+### Java Version
+
+Minimum Java Version: Java 11
 
 ### Internet Access
 
@@ -32,8 +87,8 @@ In order to analyze some technology stacks dependency-check may require other
 development tools to be installed. Some of the analysis listed below may be
 experimental and require the experimental analyzers to be enabled.
 
-1. To analyze .NET Assemblies the dotnet 6 run time or SDK must be installed.
-   - Assemblies targeting other run times can be analyzed - but 6 is required to run the analysis.
+1. To analyze .NET Assemblies the dotnet 8 run time or SDK must be installed.
+   - Assemblies targeting other run times can be analyzed - but 8 is required to run the analysis.
 2. If analyzing GoLang projects `go` must be installed.
 3. The analysis of `Elixir` projects requires `mix_audit`.
 4. The analysis of `npm`, `pnpm`, and `yarn` projects requires `npm`, `pnpm`, or `yarn` to be installed.
@@ -55,7 +110,7 @@ The latest CLI can be downloaded from github in the [releases section](https://g
 Downloading the latest release:
 ```
 $ VERSION=$(curl -s https://jeremylong.github.io/DependencyCheck/current.txt)
-$ curl -s "https://github.com/jeremylong/DependencyCheck/releases/download/v$VERSION/dependency-check-$VERSION-release.zip" --output dependency-check.zip
+$ curl -Ls "https://github.com/jeremylong/DependencyCheck/releases/download/v$VERSION/dependency-check-$VERSION-release.zip" --output dependency-check.zip
 ```
 
 On *nix
@@ -119,11 +174,11 @@ For instructions on the use of the Ant Task, please see the [dependency-check-an
 ## Development Prerequisites
 
 For installation to pass, you must have the following components installed:
-* Java: `java -version` 1.8
+* Java: `java -version` 11.0
 * Maven: `mvn -version` 3.5.0 and higher
 
 Tests cases require:
-* dotnet core version 6.0
+* dotnet core version 8.0
 * Go: `go version` 1.12 and higher
 * Ruby [bundler-audit](https://github.com/rubysec/bundler-audit#install)
 * [Yarn](https://classic.yarnpkg.com/en/docs/install/)
@@ -263,7 +318,7 @@ docker run --rm ^
 Building From Source
 --------------------
 
-To build dependency-check (using Java 8) run the command:
+To build dependency-check (using Java 11) run the command:
 
 ```
 mvn -s settings.xml install
@@ -306,7 +361,9 @@ Permission to modify and redistribute is granted under the terms of the Apache 2
 
 Dependency-Check makes use of several other open source libraries. Please see the [NOTICE.txt][notices] file for more information.
 
-Copyright (c) 2012-2023 Jeremy Long. All Rights Reserved.
+This product uses the NVD API but is not endorsed or certified by the NVD.
+
+Copyright (c) 2012-2024 Jeremy Long. All Rights Reserved.
 
   [wiki]: https://github.com/jeremylong/DependencyCheck/wiki
   [notices]: https://github.com/jeremylong/DependencyCheck/blob/main/NOTICE.txt

@@ -17,22 +17,12 @@
  */
 package org.owasp.dependencycheck.analyzer;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.List;
-import java.util.Set;
-import java.util.regex.Pattern;
-import javax.annotation.concurrent.ThreadSafe;
 import org.owasp.dependencycheck.Engine;
 import org.owasp.dependencycheck.analyzer.exception.AnalysisException;
 import org.owasp.dependencycheck.dependency.Dependency;
 import org.owasp.dependencycheck.dependency.Evidence;
 import org.owasp.dependencycheck.dependency.EvidenceType;
 import org.owasp.dependencycheck.exception.InitializationException;
-import org.owasp.dependencycheck.xml.suppression.PropertyType;
 import org.owasp.dependencycheck.utils.DownloadFailedException;
 import org.owasp.dependencycheck.utils.Downloader;
 import org.owasp.dependencycheck.utils.FileUtils;
@@ -40,13 +30,25 @@ import org.owasp.dependencycheck.utils.ResourceNotFoundException;
 import org.owasp.dependencycheck.utils.Settings;
 import org.owasp.dependencycheck.utils.TooManyRequestsException;
 import org.owasp.dependencycheck.xml.hints.EvidenceMatcher;
-import org.owasp.dependencycheck.xml.hints.VendorDuplicatingHintRule;
 import org.owasp.dependencycheck.xml.hints.HintParseException;
 import org.owasp.dependencycheck.xml.hints.HintParser;
 import org.owasp.dependencycheck.xml.hints.HintRule;
+import org.owasp.dependencycheck.xml.hints.VendorDuplicatingHintRule;
+import org.owasp.dependencycheck.xml.suppression.PropertyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.SAXException;
+
+import javax.annotation.concurrent.ThreadSafe;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * This analyzer adds evidence to dependencies to enhance the accuracy of
@@ -80,7 +82,7 @@ public class HintAnalyzer extends AbstractAnalyzer {
     /**
      * The phase that this analyzer is intended to run in.
      */
-    private static final AnalysisPhase ANALYSIS_PHASE = AnalysisPhase.PRE_IDENTIFIER_ANALYSIS;
+    private static final AnalysisPhase ANALYSIS_PHASE = AnalysisPhase.POST_INFORMATION_COLLECTION2;
 
     /**
      * Returns the name of the analyzer.
@@ -198,7 +200,7 @@ public class HintAnalyzer extends AbstractAnalyzer {
             for (VendorDuplicatingHintRule dhr : vendorHints) {
                 if (dhr.getValue().equalsIgnoreCase(e.getValue())) {
                     dependency.addEvidence(EvidenceType.VENDOR, new Evidence(e.getSource() + " (hint)",
-                            e.getName(), dhr.getDuplicate(), e.getConfidence()));
+                            e.getName(), dhr.getDuplicate(), e.getConfidence(), true));
                 }
             }
         }
@@ -265,13 +267,12 @@ public class HintAnalyzer extends AbstractAnalyzer {
                     deleteTempFile = true;
                     file = getSettings().getTempFile("hint", "xml");
                     final URL url = new URL(filePath);
-                    final Downloader downloader = new Downloader(getSettings());
                     try {
-                        downloader.fetchFile(url, file, false);
+                        Downloader.getInstance().fetchFile(url, file, false);
                     } catch (DownloadFailedException ex) {
                         try {
                             Thread.sleep(500);
-                            downloader.fetchFile(url, file, true);
+                            Downloader.getInstance().fetchFile(url, file, true);
                         } catch (TooManyRequestsException ex1) {
                             throw new HintParseException("Unable to download hint file `" + file + "`; received 429 - too many requests", ex1);
                         } catch (ResourceNotFoundException ex1) {
@@ -291,7 +292,7 @@ public class HintAnalyzer extends AbstractAnalyzer {
                         try (InputStream fromClasspath = FileUtils.getResourceAsStream(filePath)) {
                             deleteTempFile = true;
                             file = getSettings().getTempFile("hint", "xml");
-                            org.apache.commons.io.FileUtils.copyInputStreamToFile(fromClasspath, file);
+                            Files.copy(fromClasspath, file.toPath());
                         } catch (IOException ex) {
                             throw new HintParseException("Unable to locate hints file in classpath", ex);
                         }

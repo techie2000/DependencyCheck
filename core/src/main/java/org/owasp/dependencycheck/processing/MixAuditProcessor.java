@@ -31,7 +31,7 @@ import org.owasp.dependencycheck.analyzer.exception.AnalysisException;
 import org.owasp.dependencycheck.data.elixir.MixAuditJsonParser;
 import org.owasp.dependencycheck.data.elixir.MixAuditResult;
 import org.owasp.dependencycheck.dependency.Confidence;
-import org.owasp.dependencycheck.dependency.CvssV2;
+
 import org.owasp.dependencycheck.dependency.Dependency;
 import org.owasp.dependencycheck.dependency.EvidenceType;
 import org.owasp.dependencycheck.dependency.Vulnerability;
@@ -166,6 +166,7 @@ public class MixAuditProcessor extends Processor<InputStream> {
 
         dep.addEvidence(EvidenceType.VERSION, "mix_audit", "Version", version, Confidence.HIGHEST);
         dep.addEvidence(EvidenceType.PRODUCT, "mix_audit", "Package", packageName, Confidence.HIGHEST);
+        dep.addEvidence(EvidenceType.VENDOR, "mix_audit", "Package", packageName, Confidence.HIGH);
 
         try {
             final PackageURL purl = PackageURLBuilder.aPackageURL().withType("hex").withName(packageName)
@@ -197,7 +198,7 @@ public class MixAuditProcessor extends Processor<InputStream> {
         vulnerability.addVulnerableSoftware(vs);
         vulnerability.setMatchedVulnerableSoftware(vs);
 
-        vulnerability.setCvssV2(new CvssV2(-1, "-", "-", "-", "-", "-", "-", "unknown"));
+        vulnerability.setUnscoredSeverity("UNKOWN");
         vulnerability.setDescription(result.getDescription());
         vulnerability.setName(result.getCve());
 

@@ -6,10 +6,11 @@ to extract identification information from the files analyzed.
 | Analyzer | File Types Scanned | Analysis Method |
 | -------- | ------------------ | --------------- |
 | [Archive](./archive-analyzer.html) | Zip archive format (\*.zip, \*.ear, \*.war, \*.jar, \*.sar, \*.apk, \*.nupkg); Tape Archive Format (\*.tar); Gzip format (\*.gz, \*.tgz); Bzip2 format (\*.bz2, \*.tbz2); RPM format (\*.rpm) | Extracts archive contents, then scans contents with all available analyzers. |
-| [Assembly](./assembly-analyzer.html) | .NET Assemblies (\*.exe, \*.dll) | Uses [GrokAssembly.exe](https://github.com/colezlaw/GrokAssembly); requires the dotnet core 6.0 runtime to be installed. |
+| [Assembly](./assembly-analyzer.html) | .NET Assemblies (\*.exe, \*.dll) | Uses [GrokAssembly.exe](https://github.com/colezlaw/GrokAssembly); requires the dotnet core 8.0 runtime to be installed. |
 | [Jar](./jar-analyzer.html) | Java archive files (\*.jar); Web application archive (\*.war) | Examines archive manifest metadata, and Maven Project Object Model files (pom.xml). |
 | [RetireJS](./retirejs-analyzer.html) | JavaScript files | Analyzes JavaScript files using the [RetireJS](https://github.com/RetireJS/retire.js) database. |
-| [Node.js](./nodejs.html) | NPM package specification files (package.json) | Parses the package.json to gather a bill-of-materials for a Node JS project. |
+| [MS Build](./msbuild.html) | MS Build files (\*.csproj, \*.vbproj) | Parses the project files, including related directory build or package properties, to gather dependency information. |
+| [Node.js](./nodejs.html) | NPM package specification files (package.json) | Parses the package.json to gather a dependency information for a Node JS project. |
 | [Node Audit](./node-audit-analyzer.html) | Uses the `npm audit` APIs to report on known vulnerable node.js libraries. This analyzer requires an Internet connection. |
 | [Nugetconf](./nugetconf-analyzer.html) | Nuget packages.config file | Uses XPath to parse specification XML. |
 | [Nuspec](./nuspec-analyzer.html) | Nuget package specification file (\*.nuspec) | Uses XPath to parse specification XML. |
@@ -30,6 +31,7 @@ several teams have found them useful in their current state.
 | [Autoconf](./autoconf.html) | Autoconf project configuration files (configure, configure.in, configure.ac) | [Regex](https://en.wikipedia.org/wiki/Regular_expression) scan for AC_INIT metadata, including in generated configuration script. |
 | [CMake](./cmake.html) | CMake project files (CMakeLists.txt) and scripts (\*.cmake) | Regex scan for project initialization and version setting commands. |
 | [CocoaPods](./cocoapods.html) | CocoaPods `.podspec` files | Extracts dependency information from specification file. |
+| [Carthage](./carthage.html) | Carthage `Cartfile.resolved` files | Extracts dependency information from specification file. |
 | [Composer Lock](./composer-lock.html) | PHP [Composer](http://getcomposer.org) Lock files (composer.lock) | Parses PHP [Composer](http://getcomposer.org) lock files for exact versions of dependencies. |
 | [CPAN File](./cpanfile.html) | Perl [cpanfile](https://metacpan.org/pod/distribution/Module-CPANfile/lib/cpanfile.pod) Lock files (composer.lock) | Parses Perl [cpanfile](https://metacpan.org/pod/distribution/Module-CPANfile/lib/cpanfile.pod) files for dependencies. |
 | [Dart](./dart.html) | `pubspec.yaml`, `pubspec.lock` | Extracts dependency information from specification files. |

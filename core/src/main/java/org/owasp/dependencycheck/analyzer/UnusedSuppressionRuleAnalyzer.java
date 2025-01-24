@@ -35,6 +35,11 @@ import org.slf4j.LoggerFactory;
 public class UnusedSuppressionRuleAnalyzer extends AbstractAnalyzer {
 
     /**
+     * Exception message.
+     */
+    protected static final String EXCEPTION_MSG = "There are %d unused suppression rule(s): check logs.";
+
+    /**
      * The Logger for use throughout the class.
      */
     private static final Logger LOGGER = LoggerFactory.getLogger(UnusedSuppressionRuleAnalyzer.class);
@@ -43,27 +48,54 @@ public class UnusedSuppressionRuleAnalyzer extends AbstractAnalyzer {
      * been reported.
      */
     private boolean reported = false;
+    /**
+     * A flag indicating whether build should fail on unused suppression rule
+     */
+    private boolean shouldFailForUnusedSuppressionRule = false;
+    /**
+     * unused suppression rule count
+     */
+    private int unusedSuppressionRuleCount = 0;
+
+    @Override
+    public synchronized void initialize(Settings settings) {
+        super.initialize(settings);
+        if (settings.getBoolean(Settings.KEYS.FAIL_ON_UNUSED_SUPPRESSION_RULE, false)) {
+            this.shouldFailForUnusedSuppressionRule = true;
+        }
+    }
 
     @Override
     protected void analyzeDependency(Dependency dependency, Engine engine) throws AnalysisException {
         if (!reported) {
-            logUnusedRules(engine);
+            checkUnusedRules(engine);
             reported = true;
+            if (unusedSuppressionRuleCount > 0 && failsForUnusedSuppressionRule()) {
+                final String message = String.format(EXCEPTION_MSG, unusedSuppressionRuleCount);
+                LOGGER.error(message);
+                throw new AnalysisException(message);
+            }
         }
     }
 
     /**
-     * Logs unused suppression RULES.
+     * check unused suppression RULES.
      *
      * @param engine a reference to the ODC engine
      */
-    private void logUnusedRules(Engine engine) {
+    protected void checkUnusedRules(Engine engine) {
         if (engine.hasObject(SUPPRESSION_OBJECT_KEY)) {
             @SuppressWarnings("unchecked")
             final List<SuppressionRule> rules = (List<SuppressionRule>) engine.getObject(SUPPRESSION_OBJECT_KEY);
             rules.forEach((rule) -> {
                 if (!rule.isMatched() && !rule.isBase()) {
-                    LOGGER.info("Suppression Rule had zero matches: {}", rule.toString());
+                    final String message = String.format("Suppression Rule had zero matches: %s", rule);
+                    if (failsForUnusedSuppressionRule()) {
+                        LOGGER.error(message);
+                    } else {
+                        LOGGER.info(message);
+                    }
+                    increaseUnusedSuppressionRuleCount();
                 }
             });
         }
@@ -88,5 +120,26 @@ public class UnusedSuppressionRuleAnalyzer extends AbstractAnalyzer {
     @Override
     public boolean supportsParallelProcessing() {
         return false;
+    }
+
+    /**
+     * increases the count of unused suppression rules.
+     */
+    public void increaseUnusedSuppressionRuleCount() {
+        unusedSuppressionRuleCount++;
+    }
+
+    /**
+     * @return the count of unused suppression rules.
+     */
+    public int getUnusedSuppressionRuleCount() {
+        return unusedSuppressionRuleCount;
+    }
+
+    /**
+     * @return whether the analyzer will fail for a unused suppression rule.
+     */
+    public boolean failsForUnusedSuppressionRule() {
+        return shouldFailForUnusedSuppressionRule;
     }
 }

@@ -22,9 +22,10 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.commons.cli.ParseException;
 import org.apache.tools.ant.DirectoryScanner;
 import org.owasp.dependencycheck.data.nvdcve.DatabaseException;
@@ -32,9 +33,10 @@ import org.owasp.dependencycheck.dependency.Dependency;
 import org.owasp.dependencycheck.dependency.Vulnerability;
 import org.apache.tools.ant.types.LogLevel;
 import org.owasp.dependencycheck.data.update.exception.UpdateException;
+import org.owasp.dependencycheck.dependency.naming.Identifier;
 import org.owasp.dependencycheck.exception.ExceptionCollection;
 import org.owasp.dependencycheck.exception.ReportException;
-import org.owasp.dependencycheck.utils.CveUrlParser;
+import org.owasp.dependencycheck.utils.Downloader;
 import org.owasp.dependencycheck.utils.InvalidSettingException;
 import org.owasp.dependencycheck.utils.Settings;
 import org.slf4j.Logger;
@@ -46,6 +48,7 @@ import ch.qos.logback.classic.filter.ThresholdFilter;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
+import io.github.jeremylong.jcs3.slf4j.Slf4jAdapter;
 import java.util.TreeSet;
 import org.owasp.dependencycheck.utils.SeverityUtil;
 
@@ -81,6 +84,10 @@ public class App {
      */
     @SuppressWarnings("squid:S4823")
     public static void main(String[] args) {
+        System.setProperty("jcs.logSystem", "slf4j");
+        if (!LOGGER.isDebugEnabled()) {
+            Slf4jAdapter.muteLogging(true);
+        }
         final int exitCode;
         final App app = new App();
         exitCode = app.run(args);
@@ -138,6 +145,7 @@ public class App {
             } else {
                 try {
                     populateSettings(cli);
+                    Downloader.getInstance().configure(settings);
                 } catch (InvalidSettingException ex) {
                     LOGGER.error(ex.getMessage());
                     LOGGER.debug(ERROR_LOADING_PROPERTIES_FILE, ex);
@@ -159,6 +167,7 @@ public class App {
             try {
                 populateSettings(cli);
                 settings.setBoolean(Settings.KEYS.AUTO_UPDATE, true);
+                Downloader.getInstance().configure(settings);
             } catch (InvalidSettingException ex) {
                 LOGGER.error(ex.getMessage());
                 LOGGER.debug(ERROR_LOADING_PROPERTIES_FILE, ex);
@@ -179,6 +188,7 @@ public class App {
         } else if (cli.isRunScan()) {
             try {
                 populateSettings(cli);
+                Downloader.getInstance().configure(settings);
             } catch (InvalidSettingException ex) {
                 LOGGER.error(ex.getMessage(), ex);
                 LOGGER.debug(ERROR_LOADING_PROPERTIES_FILE, ex);
@@ -303,26 +313,37 @@ public class App {
         for (Dependency d : engine.getDependencies()) {
             boolean addName = true;
             for (Vulnerability v : d.getVulnerabilities()) {
-                final float cvssV2 = v.getCvssV2() != null ? v.getCvssV2().getScore() : -1;
-                final float cvssV3 = v.getCvssV3() != null ? v.getCvssV3().getBaseScore() : -1;
-                final float unscoredCvss = v.getUnscoredSeverity() != null ? SeverityUtil.estimateCvssV2(v.getUnscoredSeverity()) : -1;
+                final Double cvssV2 = v.getCvssV2() != null && v.getCvssV2().getCvssData() != null
+                        && v.getCvssV2().getCvssData().getBaseScore() != null ? v.getCvssV2().getCvssData().getBaseScore() : -1;
+                final Double cvssV3 = v.getCvssV3() != null && v.getCvssV3().getCvssData() != null
+                        && v.getCvssV3().getCvssData().getBaseScore() != null ? v.getCvssV3().getCvssData().getBaseScore() : -1;
+                final Double cvssV4 = v.getCvssV4() != null && v.getCvssV4().getCvssData() != null
+                        && v.getCvssV4().getCvssData().getBaseScore() != null ? v.getCvssV4().getCvssData().getBaseScore() : -1;
+                final Double unscoredCvss = v.getUnscoredSeverity() != null ? SeverityUtil.estimateCvssV2(v.getUnscoredSeverity()) : -1;
 
                 if (cvssV2 >= cvssFailScore
                         || cvssV3 >= cvssFailScore
+                        || cvssV4 >= cvssFailScore
                         || unscoredCvss >= cvssFailScore
                         //safety net to fail on any if for some reason the above misses on 0
                         || (cvssFailScore <= 0.0f)) {
-                    float score = 0.0f;
-                    if (cvssV3 >= 0.0f) {
+                    double score = 0.0;
+                    if (cvssV4 >= 0.0) {
+                        score = cvssV4;
+                    } else if (cvssV3 >= 0.0) {
                         score = cvssV3;
-                    } else if (cvssV2 >= 0.0f) {
+                    } else if (cvssV2 >= 0.0) {
                         score = cvssV2;
-                    } else if (unscoredCvss >= 0.0f) {
+                    } else if (unscoredCvss >= 0.0) {
                         score = unscoredCvss;
                     }
                     if (addName) {
                         addName = false;
-                        ids.append(NEW_LINE).append(d.getFileName()).append(": ");
+                        ids.append(NEW_LINE).append(d.getFileName()).append(" (")
+                           .append(Stream.concat(d.getSoftwareIdentifiers().stream(), d.getVulnerableSoftwareIdentifiers().stream())
+                                         .map(Identifier::getValue)
+                                         .collect(Collectors.joining(", ")))
+                           .append("): ");
                         ids.append(v.getName()).append('(').append(score).append(')');
                     } else {
                         ids.append(", ").append(v.getName()).append('(').append(score).append(')');
@@ -475,12 +496,14 @@ public class App {
                 cli.getStringArgument(CliParser.ARGUMENT.CONNECTION_READ_TIMEOUT));
         settings.setStringIfNotEmpty(Settings.KEYS.HINTS_FILE,
                 cli.getStringArgument(CliParser.ARGUMENT.HINTS_FILE));
-        settings.setIntIfNotNull(Settings.KEYS.CVE_CHECK_VALID_FOR_HOURS,
-                cli.getIntegerValue(CliParser.ARGUMENT.CVE_VALID_FOR_HOURS));
-        settings.setIntIfNotNull(Settings.KEYS.CVE_START_YEAR,
-                cli.getIntegerValue(CliParser.ARGUMENT.CVE_START_YEAR));
         settings.setArrayIfNotEmpty(Settings.KEYS.SUPPRESSION_FILE,
                 cli.getStringArguments(CliParser.ARGUMENT.SUPPRESSION_FILES));
+        settings.setStringIfNotEmpty(Settings.KEYS.SUPPRESSION_FILE_USER,
+                cli.getStringArgument(CliParser.ARGUMENT.SUPPRESSION_FILE_USER));
+        settings.setStringIfNotEmpty(Settings.KEYS.SUPPRESSION_FILE_PASSWORD,
+                cli.getStringArgument(CliParser.ARGUMENT.SUPPRESSION_FILE_PASSWORD));
+        settings.setStringIfNotEmpty(Settings.KEYS.SUPPRESSION_FILE_BEARER_TOKEN,
+                cli.getStringArgument(CliParser.ARGUMENT.SUPPRESSION_FILE_BEARER_TOKEN));
         //File Type Analyzer Settings
         settings.setBooleanIfNotNull(Settings.KEYS.ANALYZER_EXPERIMENTAL_ENABLED,
                 cli.hasOption(CliParser.ARGUMENT.EXPERIMENTAL));
@@ -500,6 +523,8 @@ public class App {
                 cli.getStringArgument(CliParser.ARGUMENT.RETIREJS_URL_USER));
         settings.setStringIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_REPO_JS_PASSWORD,
                 cli.getStringArgument(CliParser.ARGUMENT.RETIREJS_URL_PASSWORD));
+        settings.setStringIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_REPO_JS_BEARER_TOKEN,
+                cli.getStringArgument(CliParser.ARGUMENT.RETIREJS_URL_BEARER_TOKEN));
         settings.setBooleanIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_FORCEUPDATE,
                 cli.hasOption(CliParser.ARGUMENT.RETIRE_JS_FORCEUPDATE));
         settings.setStringIfNotNull(Settings.KEYS.ANALYZER_RETIREJS_FILTERS,
@@ -508,6 +533,8 @@ public class App {
                 cli.hasOption(CliParser.ARGUMENT.RETIREJS_FILTER_NON_VULNERABLE));
         settings.setBoolean(Settings.KEYS.ANALYZER_JAR_ENABLED,
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_JAR, Settings.KEYS.ANALYZER_JAR_ENABLED));
+        settings.setBoolean(Settings.KEYS.UPDATE_VERSION_CHECK_ENABLED,
+                !cli.isDisabled(CliParser.ARGUMENT.DISABLE_VERSION_CHECK, Settings.KEYS.UPDATE_VERSION_CHECK_ENABLED));
         settings.setBoolean(Settings.KEYS.ANALYZER_MSBUILD_PROJECT_ENABLED,
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_MSBUILD, Settings.KEYS.ANALYZER_MSBUILD_PROJECT_ENABLED));
         settings.setBoolean(Settings.KEYS.ANALYZER_ARCHIVE_ENABLED,
@@ -516,6 +543,12 @@ public class App {
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_KEV, Settings.KEYS.ANALYZER_KNOWN_EXPLOITED_ENABLED));
         settings.setStringIfNotNull(Settings.KEYS.KEV_URL,
                 cli.getStringArgument(CliParser.ARGUMENT.KEV_URL));
+        settings.setStringIfNotNull(Settings.KEYS.KEV_USER,
+                cli.getStringArgument(CliParser.ARGUMENT.KEV_USER));
+        settings.setStringIfNotNull(Settings.KEYS.KEV_PASSWORD,
+                cli.getStringArgument(CliParser.ARGUMENT.KEV_PASSWORD));
+        settings.setStringIfNotNull(Settings.KEYS.KEV_BEARER_TOKEN,
+                cli.getStringArgument(CliParser.ARGUMENT.KEV_BEARER_TOKEN));
         settings.setBoolean(Settings.KEYS.ANALYZER_PYTHON_DISTRIBUTION_ENABLED,
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_PY_DIST, Settings.KEYS.ANALYZER_PYTHON_DISTRIBUTION_ENABLED));
         settings.setBoolean(Settings.KEYS.ANALYZER_PYTHON_PACKAGE_ENABLED,
@@ -548,6 +581,8 @@ public class App {
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_OPENSSL, Settings.KEYS.ANALYZER_OPENSSL_ENABLED));
         settings.setBoolean(Settings.KEYS.ANALYZER_COMPOSER_LOCK_ENABLED,
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_COMPOSER, Settings.KEYS.ANALYZER_COMPOSER_LOCK_ENABLED));
+        settings.setBooleanIfNotNull(Settings.KEYS.ANALYZER_COMPOSER_LOCK_SKIP_DEV,
+                cli.hasOption(CliParser.ARGUMENT.COMPOSER_LOCK_SKIP_DEV));
         settings.setBoolean(Settings.KEYS.ANALYZER_CPANFILE_ENABLED,
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_CPAN, Settings.KEYS.ANALYZER_CPANFILE_ENABLED));
         settings.setBoolean(Settings.KEYS.ANALYZER_GOLANG_DEP_ENABLED,
@@ -574,6 +609,8 @@ public class App {
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_SWIFT_RESOLVED, Settings.KEYS.ANALYZER_SWIFT_PACKAGE_RESOLVED_ENABLED));
         settings.setBoolean(Settings.KEYS.ANALYZER_COCOAPODS_ENABLED,
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_COCOAPODS, Settings.KEYS.ANALYZER_COCOAPODS_ENABLED));
+        settings.setBoolean(Settings.KEYS.ANALYZER_CARTHAGE_ENABLED,
+                !cli.isDisabled(CliParser.ARGUMENT.DISABLE_CARTHAGE, Settings.KEYS.ANALYZER_CARTHAGE_ENABLED));
         settings.setBoolean(Settings.KEYS.ANALYZER_RUBY_GEMSPEC_ENABLED,
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_RUBYGEMS, Settings.KEYS.ANALYZER_RUBY_GEMSPEC_ENABLED));
         settings.setBoolean(Settings.KEYS.ANALYZER_CENTRAL_ENABLED,
@@ -591,6 +628,14 @@ public class App {
                 cli.hasOption(CliParser.ARGUMENT.DISABLE_NODE_AUDIT_SKIPDEV));
         settings.setBooleanIfNotNull(Settings.KEYS.ANALYZER_NEXUS_ENABLED,
                 cli.hasOption(CliParser.ARGUMENT.ENABLE_NEXUS));
+        settings.setStringIfNotEmpty(Settings.KEYS.ANALYZER_CENTRAL_URL,
+                cli.getStringArgument(CliParser.ARGUMENT.CENTRAL_URL));
+        settings.setStringIfNotEmpty(Settings.KEYS.ANALYZER_CENTRAL_USER,
+                cli.getStringArgument(CliParser.ARGUMENT.CENTRAL_USERNAME));
+        settings.setStringIfNotEmpty(Settings.KEYS.ANALYZER_CENTRAL_PASSWORD,
+                cli.getStringArgument(CliParser.ARGUMENT.CENTRAL_PASSWORD));
+        settings.setStringIfNotEmpty(Settings.KEYS.ANALYZER_CENTRAL_BEARER_TOKEN,
+                cli.getStringArgument(CliParser.ARGUMENT.CENTRAL_BEARER_TOKEN));
         settings.setStringIfNotEmpty(Settings.KEYS.ANALYZER_OSSINDEX_URL,
                 cli.getStringArgument(CliParser.ARGUMENT.OSSINDEX_URL));
         settings.setStringIfNotEmpty(Settings.KEYS.ANALYZER_OSSINDEX_USER,
@@ -645,35 +690,39 @@ public class App {
                 cli.getStringArgument(CliParser.ARGUMENT.ADDITIONAL_ZIP_EXTENSIONS));
         settings.setStringIfNotEmpty(Settings.KEYS.ANALYZER_ASSEMBLY_DOTNET_PATH,
                 cli.getStringArgument(CliParser.ARGUMENT.PATH_TO_CORE));
-        settings.setStringIfNotEmpty(Settings.KEYS.CVE_BASE_JSON,
-                cli.getStringArgument(CliParser.ARGUMENT.CVE_BASE_URL));
-        settings.setStringIfNotEmpty(Settings.KEYS.CVE_DOWNLOAD_WAIT_TIME,
-                cli.getStringArgument(CliParser.ARGUMENT.CVE_DOWNLOAD_WAIT_TIME));
 
-        final String cveModifiedJson = Optional.ofNullable(cli.getStringArgument(CliParser.ARGUMENT.CVE_MODIFIED_URL))
-                .filter(arg -> !arg.isEmpty())
-                .orElseGet(() -> getDefaultCveUrlModified(cli));
-        settings.setStringIfNotEmpty(Settings.KEYS.CVE_MODIFIED_JSON,
-                cveModifiedJson);
-
-        settings.setStringIfNotEmpty(Settings.KEYS.CVE_USER,
-                cli.getStringArgument(CliParser.ARGUMENT.CVE_USER));
-        settings.setStringIfNotEmpty(Settings.KEYS.CVE_PASSWORD,
-                cli.getStringArgument(CliParser.ARGUMENT.CVE_PASSWORD, Settings.KEYS.CVE_PASSWORD));
+        String key = cli.getStringArgument(CliParser.ARGUMENT.NVD_API_KEY);
+        if (key != null) {
+            if ((key.startsWith("\"") && key.endsWith("\"") || (key.startsWith("'") && key.endsWith("'")))) {
+                key = key.substring(1, key.length() - 1);
+            }
+            settings.setStringIfNotEmpty(Settings.KEYS.NVD_API_KEY, key);
+        }
+        settings.setStringIfNotEmpty(Settings.KEYS.NVD_API_ENDPOINT,
+                cli.getStringArgument(CliParser.ARGUMENT.NVD_API_ENDPOINT));
+        settings.setIntIfNotNull(Settings.KEYS.NVD_API_DELAY, cli.getIntegerValue(CliParser.ARGUMENT.NVD_API_DELAY));
+        settings.setIntIfNotNull(Settings.KEYS.NVD_API_RESULTS_PER_PAGE, cli.getIntegerValue(CliParser.ARGUMENT.NVD_API_RESULTS_PER_PAGE));
+        settings.setStringIfNotEmpty(Settings.KEYS.NVD_API_DATAFEED_URL, cli.getStringArgument(CliParser.ARGUMENT.NVD_API_DATAFEED_URL));
+        settings.setStringIfNotEmpty(Settings.KEYS.NVD_API_DATAFEED_USER, cli.getStringArgument(CliParser.ARGUMENT.NVD_API_DATAFEED_USER));
+        settings.setStringIfNotEmpty(Settings.KEYS.NVD_API_DATAFEED_PASSWORD, cli.getStringArgument(CliParser.ARGUMENT.NVD_API_DATAFEED_PASSWORD));
+        settings.setStringIfNotEmpty(Settings.KEYS.NVD_API_DATAFEED_BEARER_TOKEN, cli.getStringArgument(CliParser.ARGUMENT.NVD_API_DATAFEED_BEARER_TOKEN));
+        settings.setIntIfNotNull(Settings.KEYS.NVD_API_MAX_RETRY_COUNT, cli.getIntegerValue(CliParser.ARGUMENT.NVD_API_MAX_RETRY_COUNT));
+        settings.setIntIfNotNull(Settings.KEYS.NVD_API_VALID_FOR_HOURS, cli.getIntegerValue(CliParser.ARGUMENT.NVD_API_VALID_FOR_HOURS));
 
         settings.setStringIfNotNull(Settings.KEYS.HOSTED_SUPPRESSIONS_URL,
                 cli.getStringArgument(CliParser.ARGUMENT.HOSTED_SUPPRESSIONS_URL));
+        settings.setStringIfNotNull(Settings.KEYS.HOSTED_SUPPRESSIONS_USER,
+                cli.getStringArgument(CliParser.ARGUMENT.HOSTED_SUPPRESSIONS_USER));
+        settings.setStringIfNotNull(Settings.KEYS.HOSTED_SUPPRESSIONS_PASSWORD,
+                cli.getStringArgument(CliParser.ARGUMENT.HOSTED_SUPPRESSIONS_PASSWORD));
+        settings.setStringIfNotNull(Settings.KEYS.HOSTED_SUPPRESSIONS_BEARER_TOKEN,
+                cli.getStringArgument(CliParser.ARGUMENT.HOSTED_SUPPRESSIONS_BEARER_TOKEN));
         settings.setBoolean(Settings.KEYS.HOSTED_SUPPRESSIONS_ENABLED,
                 !cli.isDisabled(CliParser.ARGUMENT.DISABLE_HOSTED_SUPPRESSIONS, Settings.KEYS.HOSTED_SUPPRESSIONS_ENABLED));
         settings.setBooleanIfNotNull(Settings.KEYS.HOSTED_SUPPRESSIONS_FORCEUPDATE,
                 cli.hasOption(CliParser.ARGUMENT.HOSTED_SUPPRESSIONS_FORCEUPDATE));
         settings.setIntIfNotNull(Settings.KEYS.HOSTED_SUPPRESSIONS_VALID_FOR_HOURS,
                 cli.getIntegerValue(CliParser.ARGUMENT.HOSTED_SUPPRESSIONS_VALID_FOR_HOURS));
-    }
-
-    private String getDefaultCveUrlModified(CliParser cli) {
-        return CveUrlParser.newInstance(settings)
-                .getDefaultCveUrlModified(cli.getStringArgument(CliParser.ARGUMENT.CVE_BASE_URL));
     }
 
     //CSON: MethodLength

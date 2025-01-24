@@ -20,19 +20,20 @@ package org.owasp.dependencycheck.data.composer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonException;
-import javax.json.JsonObject;
-import javax.json.JsonReader;
-import javax.json.stream.JsonParsingException;
+import jakarta.json.Json;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonException;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonReader;
+import jakarta.json.stream.JsonParsingException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Parses a Composer.lock file from an input stream. In a separate class so it can hopefully be injected.
+ * Parses a Composer.lock file from an input stream. In a separate class so it
+ * can hopefully be injected.
  *
  * @author colezlaw
  */
@@ -43,12 +44,14 @@ public class ComposerLockParser {
      * The JsonReader for parsing JSON
      */
     private final JsonReader jsonReader;
-
     /**
      * The List of ComposerDependencies found
      */
     private final List<ComposerDependency> composerDependencies;
-
+    /**
+     * Whether to skip dev dependencies.
+     */
+    private final boolean skipDev;
     /**
      * The LOGGER
      */
@@ -58,11 +61,13 @@ public class ComposerLockParser {
      * Creates a ComposerLockParser from a JsonReader and an InputStream.
      *
      * @param inputStream the InputStream to parse
+     * @param skipDev whether to skip dev dependencies
      */
-    public ComposerLockParser(InputStream inputStream) {
+    public ComposerLockParser(InputStream inputStream, boolean skipDev) {
         LOGGER.debug("Creating a ComposerLockParser");
         this.jsonReader = Json.createReader(inputStream);
         this.composerDependencies = new ArrayList<>();
+        this.skipDev = skipDev;
     }
 
     /**
@@ -76,26 +81,14 @@ public class ComposerLockParser {
                 LOGGER.debug("Found packages");
                 final JsonArray packages = composer.getJsonArray("packages");
                 for (JsonObject pkg : packages.getValuesAs(JsonObject.class)) {
-                    if (pkg.containsKey("name")) {
-                        final String groupName = pkg.getString("name");
-                        if (groupName.indexOf('/') >= 0 && groupName.indexOf('/') <= groupName.length() - 1) {
-                            if (pkg.containsKey("version")) {
-                                final String group = groupName.substring(0, groupName.indexOf('/'));
-                                final String project = groupName.substring(groupName.indexOf('/') + 1);
-                                String version = pkg.getString("version");
-                                // Some version numbers begin with v - which doesn't end up matching CPE's
-                                if (version.startsWith("v")) {
-                                    version = version.substring(1);
-                                }
-                                LOGGER.debug("Got package {}/{}/{}", group, project, version);
-                                composerDependencies.add(new ComposerDependency(group, project, version));
-                            } else {
-                                LOGGER.debug("Group/package {} does not have a version", groupName);
-                            }
-                        } else {
-                            LOGGER.debug("Got a dependency with no name");
-                        }
-                    }
+                    processPackageEntry(pkg);
+                }
+            }
+            if (composer.containsKey("packages-dev") && !skipDev) {
+                LOGGER.debug("Found packages-dev");
+                final JsonArray devPackages = composer.getJsonArray("packages-dev");
+                for (JsonObject pkg : devPackages.getValuesAs(JsonObject.class)) {
+                    processPackageEntry(pkg);
                 }
             }
         } catch (JsonParsingException jsonpe) {
@@ -106,6 +99,29 @@ public class ComposerLockParser {
             throw new ComposerException("Illegal state in composer stream", ise);
         } catch (ClassCastException cce) {
             throw new ComposerException("Not exactly composer lock", cce);
+        }
+    }
+
+    protected void processPackageEntry(JsonObject pkg) {
+        if (pkg.containsKey("name")) {
+            final String groupName = pkg.getString("name");
+            if (groupName.indexOf('/') >= 0 && groupName.indexOf('/') <= groupName.length() - 1) {
+                if (pkg.containsKey("version")) {
+                    final String group = groupName.substring(0, groupName.indexOf('/'));
+                    final String project = groupName.substring(groupName.indexOf('/') + 1);
+                    String version = pkg.getString("version");
+                    // Some version numbers begin with v - which doesn't end up matching CPE's
+                    if (version.startsWith("v")) {
+                        version = version.substring(1);
+                    }
+                    LOGGER.debug("Got package {}/{}/{}", group, project, version);
+                    composerDependencies.add(new ComposerDependency(group, project, version));
+                } else {
+                    LOGGER.debug("Group/package {} does not have a version", groupName);
+                }
+            } else {
+                LOGGER.debug("Got a dependency with no name");
+            }
         }
     }
 

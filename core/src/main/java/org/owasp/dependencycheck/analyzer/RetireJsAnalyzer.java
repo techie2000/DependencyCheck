@@ -182,7 +182,7 @@ public class RetireJsAnalyzer extends AbstractFileTypeAnalyzer {
     protected void prepareFileTypeAnalyzer(Engine engine) throws InitializationException {
         // RetireJS outputs a bunch of repeated output like the following for
         // vulnerable dependencies, with little context:
-        // 
+        //
         // INFO: Vulnerability found: jquery below 1.6.3
         //
         // This logging is suppressed because it isn't particularly useful, and
@@ -216,7 +216,7 @@ public class RetireJsAnalyzer extends AbstractFileTypeAnalyzer {
             try {
                 ds.update(engine);
             } catch (UpdateException ex) {
-                throw new InitializationException("Unable to initialize the Retire JS respository", ex);
+                throw new InitializationException("Unable to initialize the Retire JS repository", ex);
             }
         }
 

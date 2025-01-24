@@ -1,5 +1,373 @@
 # Change Log
 
+## [Version 12.0.1](https://github.com/jeremylong/DependencyCheck/releases/tag/v12.0.1) (2025-01-19)
+
+- docs: Fix OSS Index Maven config documentation (#7322)
+- Fix OSS Index Maven config documentation
+- chore(docs): Document Gradle plugin support for failBuildOnUnusedSuppressionRule (#7307)
+- chore(docs): Correct analyzers config example to use Gradle dot-syntax (#7305)
+- fix: improve error message on improperly configured serverId credentials in settings.xml (#7313)
+- fix: Lower Basic serverId when Bearer was expected to a warning
+- fix: improve error message on improperly configured serverId credentials
+- fix: Correct nonProxyHosts support when no sys properties set (#7306)
+- core(docs): Group failBuildOnUnusedSuppressionRule flag next to suppression file configuration
+- core(docs): Update Gradle plugin documentation for failBuildOnUnusedSuppressionRule support
+- fix: Correct nonProxyHosts support when no sys properties set
+- chore(docs): Correct analyzers config example to use Gradle dot-syntax
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/92?closed=1). 
+
+## [Version 12.0.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v12.0.0) (2025-01-11)
+
+- feat: report on CVSS v4 (#7204)
+- feat: show from which dependency the CVE comes in failure report (#7224)
+- feat: Use Maven settings decryption API for decrypting secrets from settings.xml (#7284)
+- feat: Extend authentication to support Bearer token for many resources (#7277)
+- feat: Add a flag to fail when one or more suppression rules are not used (#7244)
+- fix: add product evidence as vendor to reduce FN (#7295)
+- fix: Make the HTTP-Client use pre-emptive authentication (#7255)
+- fix: Add the missing proxy credentials for suppressionFileUser/Password authentication scenario
+- fix: increase max retry count (#7252)
+- fix: Make the HTTP-Client use pre-emptive authentication for configured server credentials and extend HTTPClient usage to Nexus search
+- fix: Tranform into UTC the last modified date from database (#7222)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/91?closed=1). 
+
+## [Version 11.1.1](https://github.com/jeremylong/DependencyCheck/releases/tag/v11.1.1) (2024-12-04)
+
+- fix: re-enable issue locking (#7220)
+- fix: add username/password properties to be able to authenticate for central.content.url and analyzer.central.url again (#7169)
+- fix: rework replaceOrAddVulnerability (#7177)
+- fix: do not log loading of JDBC driver (#7155)
+- fix: expose flag to disable version check (#7147)
+- fix: Gracefully handle CVEs with bad configuration nodes missing CPE match expressions (#7125)
+- chore: cleanup base suppression (#7138)
+- docs: update gradle configuration documentation (#7176)
+- docs: update documentation for Gradle plugin (#7143)
+- docs: improve false positive issue templat (#7130)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/90?closed=1). 
+
+## [Version 11.1.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v11.1.0) (2024-10-30)
+
+- feat: PHP Composer Analyzer now scans packages-dev by default (#7114)
+  - Users can configure if packages-dev should be skipped
+- fix(regression): re-add h2 database driver name (#7115) 
+- fix(regression): Make the Downloader honour the proxy.nonproxyhosts ODC Setting (#7077)
+- fix: do not set legacy proxy from maven or env (#7072) (#7074)
+- docs: add missing documentation for the MS Build Analyzer (#7113)
+- docs: Document the breaking change for Maven plugin as reporting plugin (#7079)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/89?closed=1). 
+
+## [Version 11.0.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v11.0.0) (2024-10-21)
+
+- **breaking change**: Switch from JMockit to Mockito & build target to Java 11 (#6922)
+  - dependency-check now requires a minimum of Java 11.0 to run
+- **breaking change**: bump com.h2database:h2 from 2.1.214 to 2.3.232 (#6132)
+  - H2 databases generated with an older version of ODC will not work with ODC 11.0.0; a new H2 db must be generated
+- **breaking change**: Maven plugin updated to Doxia 2.x reporting stack
+  - Users of the Maven plugin that configure it as a reporting plugin will need to use maven-site-plugin 3.20.0 or later (#6959)
+- feat: Replace old Downloader by an Apache HTTPClient based downloader
+- feat: Use Apache HTTPClient for downloads of public resources (#6949)
+- feat: Also make NodeAuditSearch usr our HTTPClient based connections
+- feat: Also make OSSIndexAnalyzer use our HTTPClient based connections
+- feat: Migrate CentralSearch to use Apache HTTP-client via Downloader
+- feat: Extend apache HTTP-client usage to EngineVersionCheck
+- feat: Remove the need to specify dbDriver for external databases using JDBCv4 ServiceLoader supporting JDBC drivers (#6938)
+- fix: use latest generated suppressions (#7064)
+- fix: Fixup parameter sequence for Dowloader credentials (#7033)
+- fix: Fixup the missing addition of NVD API Datafeed credentials (if configured)
+- fix: Fixup broken proxy authentication in first attempt; extend to include KEV downloads
+- fix: store timestamps locally for local resources (#6936)
+- build: Remove the animal-sniffer, propagate java version to plugin-archetype (#6950)
+- build: Update Checkstyle configuration and Suppression DTD references (#6951)
+- chore: Update test db schema (#7036)
+- chore: remove old, unneeded database upgrade script
+- docs: reformat javadoc (#7009)
+- docs: Fixup javadoc warnings (#6995)
+- chore: Replace use of several deprecated methods/classes by their successors (#6933)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/87?closed=1). 
+
+## [Version 10.0.4](https://github.com/jeremylong/DependencyCheck/releases/tag/v10.0.4) (2024-09-01)
+
+ - build(deps): exclude unused dependency (#6916)
+ - fix: improve regex (#6917)
+ - fix: correctly handle null values in cpeMatch (#6915)
+ - fix(site): Update Fluido skin to resolve broken fork-me-on-github image (#6914)
+ - fix: do not report over 100% download complete (#6899)
+ - fix: Correct spelling of occurring in NvdApiDataSource.java (#6883)
+ - fix: skip blank lines in requirements.txt (#6867)
+ - fix: correct percentage calculation (#6868)
+ - docs: remove old recommendation (#6860)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/88?closed=1). 
+
+## [Version 10.0.3](https://github.com/jeremylong/DependencyCheck/releases/tag/v10.0.3) (2024-07-16)
+
+- feat: Enable configuration of a lower resultsPerPage on NVD API (#6843)
+- build(deps): bump open-vulnerability-clients from 6.1.6 to 6.1.7 (#6848)
+- build(deps): bump JamesIves/github-pages-deploy-action from 4.6.1 to 4.6.3 (#6814)
+- build(deps): bump org.codehaus.mojo:versions-maven-plugin from 2.16.2 to 2.17.0 (#6762)
+- build(deps): bump org.apache.maven.plugins:maven-checkstyle-plugin from 3.3.1 to 3.4.0 (#6815)
+- build(deps): bump golang from 1.22.4-alpine to 1.22.5-alpine (#6805)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/84?closed=1). 
+
+## [Version 10.0.2](https://github.com/jeremylong/DependencyCheck/releases/tag/v10.0.2) (2024-07-06)
+
+**Mandatory Upgrade** - due to older versions of dependency-check causing numerous, spurious requests that end in processing failures, this upgrade is mandatory so that the NVD can differentiate valid requests and block the old clients.
+
+- build(deps): bump open-vulnerability-clients (#6810)
+- fix(db): #6788 removing redundant db index "idxVulnerability" on "vulnerability.cve" (#6807)
+- docs: Further improve formatting and docs of H2 database caching strats (#6804)
+- fix: update_vulnerability in dbStatements_oracle.properties (#6803)
+- fix: fix NPE  (#6778)
+- fix: add hint to resolve false negative (#6802)
+- chore: update configure (#6794)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/86?closed=1). 
+
+## [Version 10.0.1](https://github.com/jeremylong/DependencyCheck/releases/tag/v10.0.1) (2024-07-02)
+
+- build(deps): bump open-vulnerability-client (#6772)
+- fix: remove debug logging (#6770)
+- fix: postgresql column count error (#6773)
+- fix: mssql column name and version (#6761)
+- docs: update supported versions (#6771)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/85?closed=1). 
+
+## [Version 10.0.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v10.0.0) (2024-07-01)
+
+- **breaking change**: upgrade to dotnet 8.0 (#6580)
+  - Users of the AssemblyAnalyzer must upgrade/utilize dotnet 8 to analyze assemblies
+- feat: fix the NVD API related errors by adding cvssV4 support (#6756)
+   - **breaking changes**: anyone utilizing a centralized database will need to upgrade the schema; see changes in [PR #6756](https://github.com/jeremylong/DependencyCheck/pull/6756/files#diff-ca432c4b41d39caa84d140e06694b09c7e6394c8a2db72ba27516dc77ee3bd67)
+- fix: avoid escaping unnecessary chars in HTML report suppression regexes (#6749)
+- fix: #6688 Trim version number when parsin POM (#6705)
+- fix: change request if lockfile is file v3 (#6690)
+- fix: skip pyproject.toml unless it contains `tool.poetry` before ensuring lockfiles (#6681)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/83?closed=1). 
+
+## [Version 9.2.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.2.0) (2024-05-15)
+
+ - docs: update logo per intellj (#6660)
+ - feat: Carthage analyzer (#6614)
+ - fix: Ensure valid JSON output for gitlab report (#6630)
+ - feat: Support Package.swift version 3 Specification (#6578)
+ - chore: Update the packaged suppressions to include new hosted suppressions (#6567)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/82?closed=1). 
+
+## [Version 9.1.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.1.0) (2024-03-31)
+
+- feat: Add v2 support for maven_install.json (#6528)
+- build(deps): bump open-vulnerability-client (#6554)
+  - resolves update issues due to CVSS Metrics 4.0
+- build(deps): bump jackson.version from 2.16.0 to 2.16.1 (#6353)
+- build(deps): bump org.jsoup:jsoup from 1.16.2 to 1.17.2 (#6362)
+- build(deps): bump golang from 1.21.5-alpine to 1.22.1-alpine (#6506)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/81?closed=1).
+
+## [Version 9.0.10](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.10) (2024-03-15)
+
+- fix: #4321 Suppress redis server CVEs for client libraries (#4321) (#6489)
+- fix: bump commons-compress from 1.25.0 to 1.26.0 to fix CVE-2024-25710 and CVE-2024-26308 (#6492)
+- feat: Allow to pass NVD API key via environment variable (#6454)
+- fix: issue 5452 - ConcurrentModificationException in NodePackageAnalyzer.processDependencies - adding synchronized block  (#6501)
+- docs: document the default data directory (#6484)
+- fix: prevent NPE in bundler audit (#6462)
+- fix: #6441 Improve suppression rule to not restrict to a single version (#6442)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/80?closed=1).
+
+## [Version 9.0.9](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.9) (2024-01-17)
+
+- fix: for #6374 to delete non-empty directories (#6375)
+- fix: NoSuchMethodError closeQuietly(java.io.Closeable[]) (#6377)
+- chore: close stream to prevent possible resource leak (#6382)
+- docs: Document default for CLI --data (#6359)
+- docs: document gradle build (#6371)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/79?closed=1).
+
+## [Version 9.0.8](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.8) (2024-01-06)
+
+- fix: favor stability over performance (#6349)
+- chore: replace commons-io with core java calls (#6343)
+- fix: improve error reporting for invalid H2 database (#6339)
+- fix: rework fix for closing input streams on errors correctly (#6338)
+- fix: reduce chance NVD API block updates due to rate limit (#6333)
+- fix: ensure open handles will not leak on errors (#6326)
+- fix: improve error reporting (#6324)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/78?closed=1).
+
+## [Version 9.0.7](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.7) (2023-12-18)
+
+- docs: document insecure configuration for GHSA-qqhq-8r2c-c3f5 (#6315)
+- fix: improve memory usage on NVD update (#6321)
+- fix: skip pyproject.toml unless it contains `tool.poetry` (#6316)
+- fix: resolve build error that may cause an issue on some JDK versions (#6312)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/77?closed=1).
+
+## [Version 9.0.6](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.6) (2023-12-15)
+
+- build: bump open-vulnerability-clients@5.1.1 (#6308)
+- fix: mask nvd.api.key in logs; see GHSA-qqhq-8r2c-c3f5 (#6307)
+- fix: update java version check (#6297)
+- fix: more efficient memory usage (#6299)
+- fix: stream NVD data via Jackson to reduce memory footprint (#6275)
+- docs: document github action caching (#6301)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/76?closed=1).
+
+## [Version 9.0.5](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.5) (2023-12-13)
+
+- fix: make NVD API endpoint configurable (#6287)
+- fix: synch last modified timestamp for NVD API (#6281)
+- fix: read NVD cache meta files if cache.properties does not exist (#6282)
+- fix: correct property for nonProxyHosts (#6285)
+- fix: reduce apache http logging (#6280)
+- fix: store last modified timestamp for RetireJS and the Hosted Suppression File in db (#6271)
+- build: bump golang in the docker image (#6274)
+- fix: use temporary files to reduce memory usage during the NVD Update (#6270)
+- fix: use BIT for Oracle DB instead of Boolean when calling prepared statements (#6264)
+- fix: showing all reference tags in reports (#6259)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/75?closed=1).
+
+## [Version 9.0.4](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.4) (2023-12-08)
+
+- fix: utilize maven proxy if present (#6255)
+- fix: allow api key in cli to be quoted (#6253)
+- fix: use correct maven plugin reporting plugin (#6244)
+- fix: correct trailing comma in JSON report (#6245)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/74?closed=1).
+
+## [Version 9.0.3](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.3) (2023-12-06)
+
+- fix: use Java properties for proxy configuration (#6238)
+- docs: update proxy configuration documentation (#6237)
+- docs: add documentation on caching (#6204)
+- docs: Clarify H2 database caching strategy (#6220)
+- docs: Update list of supported report formats (#6224)
+- docs: example 5 with new nvdDatafeedUrl parameter (#6215)
+- fix: prevent NPEs (#6232 and #6206)
+- fix: check valid for hours for NVD API (#6225)
+- fix: correct NVD cache last checked logic (#6218)
+- fix: nvd datafeed should process current year (#6213)
+- fix: correct references to cvssv2 and cvssv3 fields in json and xml reports (#6212)
+- fix: correct name on reference links in report (#6205)
+- fix: flaws int the gitlab report (#6193)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/73?closed=1).
+
+## [Version 9.0.2](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.2) (2023-12-01)
+
+- fix: remove virtual match string on NVD API Request (#6177)
+- fix: correct meta data in report after switching the NVD API (#6154)
+- fix: retry HTTP connections to NVD on 502 and 504 errors (#6151)
+- fix: Gitlab report format needs severity capitalized (#6182)
+- fix: improve JDK update version parsing (#6163)
+- fix: mute JCS logging (again) (#6153)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/72?closed=1).
+
+## [Version 9.0.1](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.1) (2023-11-26)
+
+**breaking changes**: See the [upgrade notice](https://github.com/jeremylong/DependencyCheck#900-upgrade-notice)
+
+- fix: check java 8 update version; minimum JRE is 8 update 251 (#6118)
+- fix: add retry for failed NVD API requests (#6136)
+- docs: add default values to documentation for the NVD API Delay (#6135)
+- chore: Revert "build(deps): bump com.h2database:h2 from 2.1.214 to 2.2.224" (#6131)
+  - this is a **breaking change** for anyone that successfully created the H2 database with 9.0.0.
+- fix: mute jcs logging (#6130)
+- docs: update NVD notice (#6110)
+- fix: Use the correct key for NVD API-Key from Maven Settings serverId (#6109)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/71?closed=1).
+
+## [Version 9.0.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v9.0.0) (2023-11-22)
+
+**breaking changes**: See the [upgrade notice](https://github.com/jeremylong/DependencyCheck#900-upgrade-notice)
+
+- feat: Utilize NVD API (#5978)
+- feat: gitlab dependency scanner report format #5919 (#5920)
+- fix: Use ASCII apostrophe for console message (#6076)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/68?closed=1).
+
+## [Version 8.4.3](https://github.com/jeremylong/DependencyCheck/releases/tag/v8.4.3) (2023-11-15)
+
+- fix: bump jcs3 (#6047)
+- docs: Corrected docs on hostedSuppressions (#6035)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/70?closed=1).
+
+## [Version 8.4.2](https://github.com/jeremylong/DependencyCheck/releases/tag/v8.4.2) (2023-10-22)
+
+- fix: correct log configuration in cli (#6002)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/69?closed=1).
+
+## [Version 8.4.1](https://github.com/jeremylong/DependencyCheck/releases/tag/v8.4.1) (2023-10-21)
+
+### Fixed
+
+- fix: upgrade to JCS3 (#5114)
+- fix: Support ~= version specifier in requirements.txt and pipfile (#5902)
+- fix: Version of dependency no longer ignored when CPE product has a 'java' suffix in a product name (#5901)
+- fix: Do not filter out evidences added by hints (#5900)
+- fix: fixes FP #5925 (#5927)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/67?closed=1).
+
+## [Version 8.4.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v8.4.0) (2023-08-19)
+
+### Added
+
+- feat: Add support for Nexus v3 to NexusAnalyzer (#5849)
+
+### Fixed
+
+- fix: Hint Analyzer should run before VersionFilter Analyzer (#5818)
+- chore: switch to sha1-pinning as suggested by Semgrep
+- fix: OSS Index Analyzer SocketTimeoutException exception handling based on warn only parameter (#5845)
+- fix: use curl with -L to follow github redirect (#5808)
+- fix: use curl with -L to follow github redirect
+- fix: #5671 out of memory error (#5789)
+- fix: #5671 Exit method as soon as we detect a loop to prevent an infinite loop leading to an OutOfMemoryError
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/66?closed=1).
+
+## [Version 8.3.1](https://github.com/jeremylong/DependencyCheck/releases/tag/v8.3.1) (2023-06-12)
+
+Re-release of 8.3.0 as 8.3.1.
+
+## [Version 8.3.0](https://github.com/jeremylong/DependencyCheck/releases/tag/v8.3.0) (2023-06-12)
+
+### Added
+
+ - Add LibmanAnalyzer (#5652)
+ - Update HTML report Dependencies header based on display settings (#5619)
+ - Add link to suppressed vulnerabilities header in HTML report (#5620)
+ - Enable local proxy configuration in maven plugin configuration (#5696)
+
+### Fixed
+
+ - Fix npm alias present in requires of dependencies (#5703)
+ - Make Central URL configurable via CLI (#5667)
+ - Ensure support of CVSSv3.1 (#5602)
+
+See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/milestone/65?closed=1).
 
 ## [Version 8.2.1](https://github.com/jeremylong/DependencyCheck/releases/tag/v8.2.1) (2023-03-23)
 
@@ -103,7 +471,7 @@ See the full listing of [changes](https://github.com/jeremylong/DependencyCheck/
 - The `gradle` and `maven` plugins now have the capability to scan the build plugins ([#4035](https://github.com/jeremylong/DependencyCheck/issues/4035)).
 - The `gradle` and `maven` plugins, for transitive dependencies, will report the root dependency in the project that included the transitive dependency ([#5001](https://github.com/jeremylong/DependencyCheck/pull/5001)).
 - Added `properties.security-severity` to SARIF report for better integration with GitHub Security Code scanning ([#5277](https://github.com/jeremylong/DependencyCheck/pull/5227)).
-- Allow for HTTP auth settings for Retire JS respository ([#5209](https://github.com/jeremylong/DependencyCheck/pull/5209)).
+- Allow for HTTP auth settings for Retire JS repository ([#5209](https://github.com/jeremylong/DependencyCheck/pull/5209)).
 - New schema for the XML report was added to support some of the above additions ([#5296](https://github.com/jeremylong/DependencyCheck/pull/5296)).
 - Added missing gradle option to only warn on remote errors from the OSS Index Analyzer ([gradle #303](https://github.com/dependency-check/dependency-check-gradle/pull/303)).
 
